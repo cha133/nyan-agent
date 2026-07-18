@@ -1,6 +1,6 @@
 # 跨会话交接
 
-状态：2026-07-19。阶段 1–3 已完成；阶段 4 的产品外壳、模型选择、默认项目上下文持久化和真实 Tauri E2E 已落地，剩余重点是任务切换/标题刷新收尾与 Win11 Mica spike。阶段 5 的 shell/edit/subagent 尚未开始。
+状态：2026-07-19。阶段 1–3 已完成；阶段 4 的产品外壳、模型选择、默认项目上下文持久化、真实 Tauri E2E 和 Win11 Mica 已落地，剩余重点是任务切换与标题刷新收尾。阶段 5 的 shell/edit/subagent 尚未实现，但 shell 的 Profile/非交互启动策略已经确定。
 
 ## 新会话目标
 
@@ -8,7 +8,7 @@
 
 1. 修复异步标题写入与前端列表刷新之间的竞态，优先设计明确的 `session.title.updated` 事件或等价的可靠语义。
 2. 用现有真实桌面 E2E 验证任务切换、运行中只读查看、停止和返回活动任务，并补充稳定回归覆盖。
-3. 做 Win11 Mica + 原生标题栏 spike；保持白色主题和原生窗口约束。
+3. 完成阶段 4 交互验收后再进入阶段 5；不要重复实现已经提交的 Mica spike。
 
 阶段 5 不要混入阶段 4 的收尾提交。
 
@@ -36,6 +36,14 @@
 - 模型目录与选择已贯通：新任务显式选模型，闲置任务可切换，运行中禁止切换，最近模型写入共享 runtime state。
 - `RuntimeStateStore` 合并维护 `recentModel` 与 `recentProjectId`；协议新增 `project.context.set`。项目/无项目上下文会在刷新和重启后恢复，移除项目时自动清理失效引用。
 - 真实 Tauri E2E 已接入 WebdriverIO Tauri Service embedded provider，首条 smoke flow 验证后端 ready、产品外壳、命令桥、项目上下文切换与刷新后恢复。
+- Win11 Mica 已在 `7535cfd` 落地：保留原生标题栏与系统三按钮，透明只用于侧栏材质，主 transcript/composer 维持不透明白色层级。
+
+### 阶段 5 shell 已定约束
+
+- 默认启动 `pwsh.exe -NoLogo -NonInteractive -EncodedCommand ...`，不添加 `-NoProfile`，让 mise 等用户工具链初始化继续生效。
+- 启动前设置 `TERM=dumb`、`NYAN_AGENT=1`、`NO_COLOR=1` 和无分页器环境；推荐 Profile 在必要环境初始化后检测 `NYAN_AGENT`/`TERM` 并跳过 prompt、主题、PSReadLine 等交互增强。
+- `-NonInteractive` 只防止输入提示挂起，不提供可靠的 Profile 内模式变量；不要用 `[Environment]::UserInteractive` 等启发式替代 agent 标志。
+- 不设置通用 `CI=1`；首版不做 PowerShell 环境快照，只有实测启动成本明显时再评估按项目缓存。
 
 ## E2E 与 Node 运行时
 
@@ -58,7 +66,6 @@
 
 - 异步标题仍有 UI 刷新竞态：标题生成不阻塞主 turn，`store.setTitle` 没有领域事件；前端在 turn 终态刷新列表时，标题可能尚未写完。不要用延时轮询掩盖。
 - “运行中切到其他任务只读查看”已有禁用基础，但尚未完成完整真实交互验收和 E2E 覆盖。
-- Mica/window effects 尚未实现；当前是普通原生标题栏和白色不透明主体。
 - 缺配置时项目/任务仍可加载，模型选择器显示无可用模型与配置错误；错误文案尚未统一。
 - production bundle 有大于 500 KiB 的 Vite chunk warning，目前不阻塞 MVP。
 - Windows Job Object、shell 进程树和三个模型工具属于后续阶段。
@@ -87,7 +94,7 @@
 2. 增加标题更新领域事件与 TS/Rust fixture/test，修复前端标题刷新竞态。
 3. 扩展 E2E，覆盖至少两个任务、活动 turn 切换、只读状态、停止和返回活动任务。
 4. 用 `dev:inspect` 辅助检查 DOM、截图与 console/errors；避免把探索性 CDP 脚本当作稳定 E2E。
-5. 完成 Win11 Mica + 原生标题栏 spike，记录是否保留 `decorations: true` 的结论。
+5. 阶段 4 验收完成后，按已定的 Profile/非交互策略实现 shell，不要恢复旧的 `-NoProfile` 方案。
 6. 同步 [01-state.md](01-state.md)，运行根级 check/test/build/e2e，提交原子 commit。
 
 ## 新会话开场建议

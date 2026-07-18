@@ -79,7 +79,7 @@
 
 - 验证并修正任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
 - 在现有真实桌面 E2E 基础上补充任务切换、停止和标题更新回归覆盖。
-- 完成 Win11 Mica spike 与窗口细节打磨。
+- 收尾窗口细节与阶段 4 验收；Win11 Mica spike 已完成。
 
 ## 进行中：阶段 4 — 产品外壳
 
@@ -130,6 +130,7 @@
 
 ### 阶段 5 — 三个工具
 
+- [x] 确定 shell 启动折中：默认加载 Profile，设置 `TERM=dumb` + `NYAN_AGENT=1` 跳过交互增强，并保留 `-NonInteractive` 防止提示挂起；不使用 `-NoProfile`。
 - [ ] 实现 shell：PowerShell UTF-8 包装、合并输出、字节截断、长进程、超时和取消。
 - [ ] 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
 - [ ] 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。

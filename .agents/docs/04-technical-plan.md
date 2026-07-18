@@ -208,7 +208,10 @@ MVP 仍应支持“命令尚未完成”的 handle，否则模型无法可靠处
 
 实现要点：
 
-- 只启动 PowerShell 7 的 `pwsh.exe`。将 UTF-8 初始化脚本与用户命令拼成一个脚本，整体按 UTF-16LE Base64 编码一次，再以 `pwsh.exe -NoLogo -NoProfile -NonInteractive -EncodedCommand <base64>` 启动；不要双层编码。
+- 只启动 PowerShell 7 的 `pwsh.exe`。将 UTF-8 初始化脚本与用户命令拼成一个脚本，整体按 UTF-16LE Base64 编码一次，再以 `pwsh.exe -NoLogo -NonInteractive -EncodedCommand <base64>` 启动；不要双层编码，默认不要添加 `-NoProfile`。
+- 子进程创建前强制设置 `TERM=dumb`、`NYAN_AGENT=1`、`NO_COLOR=1`、空 `COLORTERM` 以及 `PAGER/GIT_PAGER/GH_PAGER=cat`。Profile 因而仍可先初始化 mise、pyenv 或必要环境，再通过 `if ($env:NYAN_AGENT -eq '1' -or $env:TERM -eq 'dumb') { return }` 跳过 PSReadLine、Starship、zoxide 等交互增强。
+- `-NonInteractive` 只负责让 `Read-Host` 和确认提示失败，不能作为 Profile 内可靠可读的模式标志；不要依赖 `[Environment]::UserInteractive`、`$Host.Name` 或 console 重定向状态推断 agent shell。`NYAN_AGENT` 是精确标志，`TERM=dumb` 用于生态兼容。
+- 不设置通用 `CI=1`，避免测试、包管理器和构建工具改变正常本地语义。Profile 的启动输出和错误按普通 shell 输出处理；后续若实测轻量 Profile 仍有明显开销，再单独评估按项目缓存环境快照，不在 MVP 首版提前引入。
 - 初始化脚本同时设置无 BOM UTF-8 的 `[Console]::InputEncoding`、`[Console]::OutputEncoding` 和 `$OutputEncoding`；Bun 端用流式 UTF-8 decoder 读取 stdout/stderr。
 - 子进程环境仅在用户未设置时补 `PYTHONIOENCODING=utf-8`，不得覆盖 `utf-8:surrogateescape` 等显式值。
 - 不在包装器末尾无条件 `exit $LASTEXITCODE`，避免较早原生命令的陈旧退出码改变复合脚本语义；需要精确退出码时让调用命令显式 `exit`。

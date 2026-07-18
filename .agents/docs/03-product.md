@@ -25,6 +25,8 @@ MVP 只提供三个模型工具：
 - 支持超时、取消，以及长时间运行命令的续接/轮询。
 - 输出只按 UTF-8 字节预算截断，不引入 GPT tokenizer；截断时保留头尾并报告省略字节数。
 - 用单层 `-EncodedCommand` 传递“UTF-8 初始化脚本 + 用户命令”，避免中文和 Windows 命令行转义损坏；宿主按 UTF-8 解码 stdout/stderr。
+- 默认加载用户 PowerShell Profile，以保留 mise 等工具链管理器设置的项目运行时；agent 在启动前设置 `TERM=dumb` 与 `NYAN_AGENT=1`，供 Profile 在完成必要环境初始化后跳过 PSReadLine、主题、prompt 和其他纯交互增强。
+- shell 同时使用 PowerShell `-NonInteractive`，让输入提示直接失败而不是挂起；它不等价于 `-NoProfile`，MVP 默认不跳过 Profile。
 - 不做 sandbox 和工具权限审批；这是单用户、全读写 MVP 的明确取舍，但提示词仍提醒模型谨慎处理不可恢复操作。
 
 ### edit
