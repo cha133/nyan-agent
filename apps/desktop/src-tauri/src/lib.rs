@@ -131,7 +131,11 @@ pub fn run() {
         .plugin(tauri_plugin_wdio_webdriver::init());
     let app = builder
         .manage(manager)
-        .setup(move |_| {
+        .setup(move |app| {
+            let main_window = app
+                .get_webview_window("main")
+                .ok_or("main window was not created")?;
+            platform::apply_window_effects(&main_window)?;
             let _ = tauri::async_runtime::block_on(startup_manager.start());
             Ok(())
         })

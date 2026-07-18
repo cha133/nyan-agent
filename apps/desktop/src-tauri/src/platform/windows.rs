@@ -4,8 +4,16 @@ use std::{
 };
 
 use std::os::windows::process::CommandExt;
+use tauri::{
+    window::{Effect, EffectsBuilder},
+    Runtime, WebviewWindow,
+};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+pub fn apply_window_effects<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
+    window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build())
+}
 
 #[derive(Clone, Debug)]
 pub struct BunRuntime {

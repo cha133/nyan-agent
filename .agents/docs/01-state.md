@@ -91,7 +91,7 @@
 - [x] 增加模型列表与最近模型选择 UI：新任务可显式选模型，既有闲置任务可更新模型，运行中禁止切换；有效选择在创建/更新任务时写入共享最近模型 state。
 - [x] 补齐新任务默认项目上下文的持久化：项目/无项目上下文写入共享 runtime state，重启后恢复，项目移除时自动清理失效引用，且不会与最近模型状态互相覆盖。
 - [x] 接入稳定桌面 E2E：WebdriverIO Tauri Service embedded provider、测试专用 Tauri 权限/前端构建、临时 XDG 数据隔离和首条产品外壳 smoke flow 已落地。
-- [ ] 完成 Mica/window effects spike。
+- [x] 完成 Mica/window effects spike：保留 Windows 原生标题栏与系统三按钮，窗口启用透明 WebView 和 Mica，侧栏透出材质，主内容保持白色不透明层级。
 
 ### 阶段 4 当前验证记录
 
@@ -101,6 +101,8 @@
 - 使用隔离的静态 provider 配置实测 HeroUI 模型 Select：可展示 provider/model、切换选项，并与项目选择、发送按钮保持同一行；修复异步模型加载导致的 uncontrolled → controlled warning 后复查 console 为空。
 - `bun run e2e` 已在真实 Tauri/WebView2 上通过：验证后端 ready、产品外壳、WDIO command bridge，以及项目/无项目上下文切换和页面刷新后的持久化恢复；1 个 spec、1 个测试通过。
 - E2E 使用 `mise.toml` 固定 Node 24，规避当前 WDIO 9/Undici 6 在 Node 26 下创建 session 时的 `UND_ERR_INVALID_ARG`；`@wdio/native-utils` 固定到 2.5.0，规避 Tauri service 1.2.0 发布依赖缺少导出的兼容问题。
+- Win11 Mica spike 将平台调用集中在 `platform/windows.rs`；原生标题栏、1200×800 默认尺寸和 960×640 最小尺寸保持不变，透明仅用于侧栏材质，transcript/composer 所在主内容仍为不透明白色。
+- Mica 改动后重新通过 `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；窗口效果未破坏启动、WDIO command bridge 或项目上下文刷新恢复。
 
 ## 后续实施队列
 
@@ -123,7 +125,7 @@
 - [x] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
 - [x] 实现侧栏每组 5 条的展开/折叠、任务导航和运行中只读查看。
 - [x] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
-- [ ] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
+- [x] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
 - [x] 用 WebdriverIO Tauri Service 固化真实桌面 smoke E2E，并隔离真实用户数据。
 
 ### 阶段 5 — 三个工具
