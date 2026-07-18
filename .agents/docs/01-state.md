@@ -11,6 +11,7 @@
 - [x] 写出第一版技术方案，等待关键细节对齐。
 - [x] 对齐 provider/model 配置、JSONL 会话存储、非流式 Markdown、侧栏折叠、subagent 展示和 Bun 缺失体验。
 - [x] 用户审批 MVP 产品约束与技术方案，可以进入实现阶段。
+- [x] 确认 MVP 界面只开发白色主题，不实现深色主题、主题切换或跟随系统主题。
 - [x] 确认 nyan 内部领域 ID 统一使用无前缀的原始 UUIDv4；类型由字段名和 branded/newtype 保证，内部 tool execution ID 不进入模型上下文。
 - [x] 完成阶段 1 workspace 骨架：桌面、agent、protocol 三个包边界落地，根级命令可统一检查、测试、构建和启动。
 - [x] 完成阶段 2 协议与进程垂直切片：共享协议、双端 NDJSON codec、Bun echo backend、Rust supervisor 和 Tauri Channel 已贯通。
@@ -77,7 +78,7 @@
 
 - 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型选择。
 - 实现侧栏导航、Lexical 纯文本输入、静态 Markdown transcript block。
-- 验证 Win11 Mica、原生标题栏、窗口尺寸与深浅色。
+- 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
 
 ## 后续实施队列
 
@@ -100,7 +101,7 @@
 - [ ] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
 - [ ] 实现侧栏每组 5 条的展开/折叠、任务导航和运行中只读查看。
 - [ ] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
-- [ ] 验证 Win11 Mica、原生标题栏、窗口尺寸与深浅色。
+- [ ] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
 
 ### 阶段 5 — 三个工具
 
