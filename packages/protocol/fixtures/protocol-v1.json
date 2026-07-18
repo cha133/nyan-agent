@@ -4,6 +4,7 @@
     { "v": 1, "type": "project.list", "requestId": "00000000-0000-4000-8000-000000000002" },
     { "v": 1, "type": "project.add", "requestId": "00000000-0000-4000-8000-000000000003", "path": "C:\\Dev\\nyan-agent" },
     { "v": 1, "type": "project.remove", "requestId": "00000000-0000-4000-8000-000000000004", "projectId": "50000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "project.context.set", "requestId": "00000000-0000-4000-8000-000000000015", "projectId": "50000000-0000-4000-8000-000000000001" },
     { "v": 1, "type": "model.list", "requestId": "00000000-0000-4000-8000-000000000005", "refresh": true },
     { "v": 1, "type": "session.list", "requestId": "00000000-0000-4000-8000-000000000006" },
     { "v": 1, "type": "session.create", "requestId": "00000000-0000-4000-8000-000000000007", "projectId": "50000000-0000-4000-8000-000000000001", "model": "provider/model" },

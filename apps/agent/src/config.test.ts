@@ -6,6 +6,8 @@ import { loadConfig, parseConfig } from "./config";
 import { ModelCatalog, discoverProviderModels } from "./models";
 import { resolveNyanPaths } from "./paths";
 import { ProviderRegistry } from "./providers";
+import { RuntimeStateStore } from "./state";
+import type { ProjectId } from "@nyan/protocol";
 
 const rawConfig = {
   version: 1,
@@ -71,8 +73,12 @@ describe("model discovery and cache", () => {
     const models = await catalog.list({ refresh: true });
     expect(models.map((model) => model.key)).toEqual(["openai-main/static-model", "openai-main/dynamic-model"]);
     expect(await catalog.selectedModel(models)).toBe("openai-main/static-model");
+    const state = new RuntimeStateStore(paths);
+    const projectId = crypto.randomUUID() as ProjectId;
+    await state.update({ recentProjectId: projectId });
     await catalog.rememberModel("openai-main/dynamic-model");
     expect(await catalog.selectedModel(models)).toBe("openai-main/dynamic-model");
+    expect(await state.read()).toMatchObject({ recentModel: "openai-main/dynamic-model", recentProjectId: projectId });
     expect(requests[0].headers.get("authorization")).toBe("Bearer secret");
     expect(JSON.parse(await readFile(paths.modelCacheFile, "utf8")).providers[0].models).toEqual(["dynamic-model", "static-model"]);
   });

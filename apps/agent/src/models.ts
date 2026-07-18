@@ -2,11 +2,10 @@ import type { NyanConfig, ProviderConfig } from "./config";
 import { atomicWriteJson, readJsonFile } from "./files";
 import type { NyanPaths } from "./paths";
 import { modelKey } from "./providers";
+import { RuntimeStateStore } from "./state";
 
 type CacheEntry = { providerId: string; fetchedAt: string; expiresAt: string; models: string[] };
 type ModelCache = { version: 1; providers: CacheEntry[] };
-type RuntimeState = { version: 1; recentModel?: string };
-
 export type AvailableModel = {
   key: string;
   providerId: string;
@@ -18,12 +17,17 @@ export type AvailableModel = {
 export type FetchLike = (input: URL | RequestInfo, init?: RequestInit) => Promise<Response>;
 
 export class ModelCatalog {
+  private readonly state: RuntimeStateStore;
+
   constructor(
     private readonly config: NyanConfig,
     private readonly paths: NyanPaths,
     private readonly fetchImpl: FetchLike = fetch,
     private readonly now: () => Date = () => new Date(),
-  ) {}
+    state?: RuntimeStateStore,
+  ) {
+    this.state = state ?? new RuntimeStateStore(paths);
+  }
 
   async list(options: { refresh?: boolean } = {}): Promise<AvailableModel[]> {
     const cache = (await readJsonFile<ModelCache>(this.paths.modelCacheFile)) ?? { version: 1, providers: [] };
@@ -42,14 +46,14 @@ export class ModelCatalog {
     models ??= await this.list();
     if (models.length === 0) throw new Error("model_not_configured: no static or discovered models are available");
     const valid = new Set(models.map((model) => model.key));
-    const state = await readJsonFile<RuntimeState>(this.paths.stateFile);
+    const state = await this.state.read();
     if (state?.recentModel && valid.has(state.recentModel)) return state.recentModel;
     if (this.config.defaultModel && valid.has(this.config.defaultModel)) return this.config.defaultModel;
     return models[0].key;
   }
 
   async rememberModel(key: string): Promise<void> {
-    await atomicWriteJson(this.paths.stateFile, { version: 1, recentModel: key } satisfies RuntimeState);
+    await this.state.update({ recentModel: key });
   }
 
   private async refresh(entries: Map<string, CacheEntry>): Promise<void> {

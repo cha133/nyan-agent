@@ -55,6 +55,14 @@ async fn remove_project(
 }
 
 #[tauri::command]
+async fn set_project_context(
+    manager: State<'_, BackendManager>,
+    project_id: Option<String>,
+) -> Result<Value, String> {
+    manager.set_project_context(project_id).await
+}
+
+#[tauri::command]
 async fn list_sessions(manager: State<'_, BackendManager>) -> Result<Value, String> {
     manager.list_sessions().await
 }
@@ -114,9 +122,14 @@ async fn cancel_turn(
 pub fn run() {
     let manager = BackendManager::new(development_agent_entry());
     let startup_manager = manager.clone();
-    let app = tauri::Builder::default()
+    let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init())
+        .plugin(tauri_plugin_dialog::init());
+    #[cfg(feature = "e2e")]
+    let builder = builder
+        .plugin(tauri_plugin_wdio::init())
+        .plugin(tauri_plugin_wdio_webdriver::init());
+    let app = builder
         .manage(manager)
         .setup(move |_| {
             let _ = tauri::async_runtime::block_on(startup_manager.start());
@@ -129,6 +142,7 @@ pub fn run() {
             list_projects,
             add_project,
             remove_project,
+            set_project_context,
             list_sessions,
             list_models,
             create_session,

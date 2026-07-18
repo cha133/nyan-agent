@@ -21,6 +21,7 @@ export type ClientMessage =
   | { v: 1; type: "project.list"; requestId: RequestId }
   | { v: 1; type: "project.add"; requestId: RequestId; path: string }
   | { v: 1; type: "project.remove"; requestId: RequestId; projectId: ProjectId }
+  | { v: 1; type: "project.context.set"; requestId: RequestId; projectId: ProjectId | null }
   | { v: 1; type: "model.list"; requestId: RequestId; refresh?: boolean }
   | { v: 1; type: "session.list"; requestId: RequestId }
   | { v: 1; type: "session.create"; requestId: RequestId; projectId?: ProjectId; cwd?: string; model?: string }
@@ -65,6 +66,7 @@ const clientTypes = new Set<ClientMessage["type"]>([
   "project.list",
   "project.add",
   "project.remove",
+  "project.context.set",
   "model.list",
   "session.list",
   "session.create",
@@ -108,6 +110,9 @@ export function parseClientMessage(value: unknown): ClientMessage {
       break;
     case "project.remove":
       requireUuid(message, "projectId");
+      break;
+    case "project.context.set":
+      if (message.projectId !== null) requireUuid(message, "projectId");
       break;
     case "model.list":
       if (message.refresh !== undefined && typeof message.refresh !== "boolean") throw invalid("refresh must be a boolean");

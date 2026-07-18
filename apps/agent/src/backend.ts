@@ -8,6 +8,7 @@ import { type NyanPaths, resolveNyanPaths } from "./paths";
 import { ProviderRegistry } from "./providers";
 import { ProjectStore } from "./projects";
 import { SessionStore } from "./sessions";
+import { RuntimeStateStore } from "./state";
 
 type HandleResult = {
   messages: ServerMessage[];
@@ -35,6 +36,7 @@ export class AgentBackend {
   private readonly paths: NyanPaths;
   private readonly store: SessionStore;
   private readonly projects: ProjectStore;
+  private readonly state: RuntimeStateStore;
   private readonly runnerFactory: (model: LanguageModel) => Runner;
   private readonly emit: (message: ServerMessage) => void | Promise<void>;
   private config?: NyanConfig;
@@ -48,6 +50,7 @@ export class AgentBackend {
     this.paths = options.paths ?? resolveNyanPaths();
     this.store = new SessionStore(this.paths);
     this.projects = new ProjectStore(this.paths);
+    this.state = new RuntimeStateStore(this.paths);
     this.config = options.config;
     this.runnerFactory = options.runnerFactory ?? ((model) => new AgentRunner(model));
     this.emit = options.emit ?? (() => {});
@@ -66,8 +69,13 @@ export class AgentBackend {
           beforeExit: async () => { await this.active?.done; },
         };
       }
-      case "project.list":
-        return { messages: [ok(message.requestId, { projects: await this.projects.list() })] };
+      case "project.list": {
+        const projects = await this.projects.list();
+        const recentProjectId = (await this.state.read()).recentProjectId;
+        const validRecentProjectId = projects.some((project) => project.id === recentProjectId) ? recentProjectId : null;
+        if (recentProjectId && !validRecentProjectId) await this.state.update({ recentProjectId: null });
+        return { messages: [ok(message.requestId, { projects, recentProjectId: validRecentProjectId })] };
+      }
       case "project.add":
         try {
           return { messages: [ok(message.requestId, { project: await this.projects.add(message.path) })] };
@@ -76,7 +84,17 @@ export class AgentBackend {
         }
       case "project.remove": {
         const removed = await this.projects.remove(message.projectId);
+        if (removed && (await this.state.read()).recentProjectId === message.projectId) {
+          await this.state.update({ recentProjectId: null });
+        }
         return { messages: [removed ? ok(message.requestId, { removed: true }) : failed(message.requestId, projectNotFound())] };
+      }
+      case "project.context.set": {
+        if (message.projectId && !await this.projects.get(message.projectId)) {
+          return { messages: [failed(message.requestId, projectNotFound())] };
+        }
+        await this.state.update({ recentProjectId: message.projectId });
+        return { messages: [ok(message.requestId, { projectId: message.projectId })] };
       }
       case "model.list": {
         if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
@@ -234,7 +252,7 @@ export class AgentBackend {
     try {
       this.config ??= await loadConfig(this.paths);
       this.registry = new ProviderRegistry(this.config);
-      this.catalog = new ModelCatalog(this.config, this.paths);
+      this.catalog = new ModelCatalog(this.config, this.paths, undefined, undefined, this.state);
     } catch (error) {
       this.configError = publicError(error);
     }

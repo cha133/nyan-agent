@@ -77,9 +77,9 @@
 
 ## 下一步：阶段 4 — 产品外壳
 
-- 验证任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
-- 持久化新任务默认项目上下文，并补齐项目与任务交互细节。
-- 完成 Win11 Mica spike 与窗口细节打磨，再固化 renderer/桌面 E2E。
+- 验证并修正任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
+- 在现有真实桌面 E2E 基础上补充任务切换、停止和标题更新回归覆盖。
+- 完成 Win11 Mica spike 与窗口细节打磨。
 
 ## 进行中：阶段 4 — 产品外壳
 
@@ -89,15 +89,18 @@
 - [x] 将阶段 3 验证页替换为 1200×800（最小 960×640）的白色双栏产品外壳，接入 HeroUI v3 Button/Select、Lucide 图标、独立 5 条展开状态和任务导航。
 - [x] 接入 Lexical 纯文本编辑器与 `react-markdown + remark-gfm` 静态 assistant block；恢复历史时从 transcript JSONL 映射展示项。
 - [x] 增加模型列表与最近模型选择 UI：新任务可显式选模型，既有闲置任务可更新模型，运行中禁止切换；有效选择在创建/更新任务时写入共享最近模型 state。
-- [ ] 补齐新任务默认项目上下文的持久化。
-- [ ] 完成 Mica/window effects spike 和稳定 E2E。
+- [x] 补齐新任务默认项目上下文的持久化：项目/无项目上下文写入共享 runtime state，重启后恢复，项目移除时自动清理失效引用，且不会与最近模型状态互相覆盖。
+- [x] 接入稳定桌面 E2E：WebdriverIO Tauri Service embedded provider、测试专用 Tauri 权限/前端构建、临时 XDG 数据隔离和首条产品外壳 smoke flow 已落地。
+- [ ] 完成 Mica/window effects spike。
 
 ### 阶段 4 当前验证记录
 
-- protocol 7 项、agent 19 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除、项目 cwd 绑定、模型列表/显式创建/更新和最近模型覆盖。
+- protocol 7 项、agent 20 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除、项目 cwd 绑定、默认项目上下文持久化与失效清理、模型列表/显式创建/更新，以及最近项目/模型状态合并写入覆盖。
 - `bun run check`、`bun run test`、`bun run build` 通过；desktop production bundle 仅有现阶段可接受的大 chunk 提示。
 - 使用 `bun run dev:inspect` 启动真实 Tauri，通过 `chrome-cdp --browser tauri` 自动发现 `DevToolsActivePort`；实测 1200×800 首屏、白色主题、无障碍树和 Lexical 中文输入，console warning 与未处理异常均为空。
 - 使用隔离的静态 provider 配置实测 HeroUI 模型 Select：可展示 provider/model、切换选项，并与项目选择、发送按钮保持同一行；修复异步模型加载导致的 uncontrolled → controlled warning 后复查 console 为空。
+- `bun run e2e` 已在真实 Tauri/WebView2 上通过：验证后端 ready、产品外壳、WDIO command bridge，以及项目/无项目上下文切换和页面刷新后的持久化恢复；1 个 spec、1 个测试通过。
+- E2E 使用 `mise.toml` 固定 Node 24，规避当前 WDIO 9/Undici 6 在 Node 26 下创建 session 时的 `UND_ERR_INVALID_ARG`；`@wdio/native-utils` 固定到 2.5.0，规避 Tauri service 1.2.0 发布依赖缺少导出的兼容问题。
 
 ## 后续实施队列
 
@@ -117,10 +120,11 @@
 
 ### 阶段 4 — 产品外壳
 
-- [ ] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
+- [x] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
 - [x] 实现侧栏每组 5 条的展开/折叠、任务导航和运行中只读查看。
 - [x] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
 - [ ] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
+- [x] 用 WebdriverIO Tauri Service 固化真实桌面 smoke E2E，并隔离真实用户数据。
 
 ### 阶段 5 — 三个工具
 
@@ -136,7 +140,7 @@
 
 ## 最近一轮没有做
 
-- 没有接入 WebdriverIO Tauri E2E；先用 `dev:inspect` + CDP 形成现场调试闭环，待阶段 4 UI 结构稳定后再固化自动化用例。
+- 没有接入 CI E2E；当前稳定桌面 E2E 先作为本机 Windows 回归入口，CI runner 与发布 smoke test 留到阶段 6。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 

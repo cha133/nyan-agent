@@ -238,6 +238,11 @@ impl BackendManager {
             .await
     }
 
+    pub async fn set_project_context(&self, project_id: Option<String>) -> Result<Value, String> {
+        self.command("project.context.set", json!({ "projectId": project_id }))
+            .await
+    }
+
     pub async fn list_sessions(&self) -> Result<Value, String> {
         self.command("session.list", json!({})).await
     }

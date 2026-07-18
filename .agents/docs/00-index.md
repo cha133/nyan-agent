@@ -40,7 +40,9 @@
 - 交互调试优先用 `click <target> <selector>` 和 `type <target> <text>`；富文本/`contenteditable` 若 selector 点击未取得焦点，可根据 `shot` 输出的 DPR 换算 CSS 坐标后使用 `clickxy`，再用 `eval` 验证 `document.activeElement` 与 DOM 状态。
 - `nav`/页面重载会主动丢弃旧页面的 Tauri 异步 callback，紧邻重载出现 “Couldn't find callback id” warning 属于调试操作副作用；页面稳定后先 `console-clear`，再用 `console-watch` 复查，不能把旧 warning 当成应用运行时故障。
 - 结束时停止 `dev:inspect` 启动的父进程，确认 Tauri、Vite 与 Bun 子进程一起退出。不要用普通 `bun run dev` 代替本流程，否则不会生成可发现的 CDP 端点。
-- WebdriverIO Tauri Service 尚未接入；计划在阶段 4 UI 结构稳定后，用于固化 renderer 与真实桌面 E2E，而不是替代现场 CDP 调试。
+- WebdriverIO Tauri Service 已使用 embedded provider 接入真实桌面 E2E；`bun run e2e` 通过测试专用 Tauri 配置构建并启动真实 WebView2，不需要外置 `tauri-driver`。Node 24 由仓库根 `mise.toml` 固定，首次运行前执行 `mise install`。
+- E2E 数据通过临时 XDG 父目录与真实用户配置隔离，测试结束后清理；WDIO 插件权限、global Tauri API 和前端 guest plugin 只进入 E2E 构建。当前 smoke flow 覆盖后端 ready、产品外壳、Tauri command bridge 和默认项目上下文的刷新恢复。
+- `dev:inspect` + CDP 继续用于现场诊断；WebdriverIO 用于稳定回归，两者职责不变。
 
 ## 用户提供的参考材料
 

@@ -98,6 +98,26 @@ describe("agent backend", () => {
     expect(loaded.messages[0]).toMatchObject({ type: "response", ok: true, result: { session: { id: session.id }, transcript: [] } });
   });
 
+  test("persists and validates the recent project context", async () => {
+    const { backend, root } = await createBackend();
+    const projectPath = join(root, "recent-workspace");
+    await mkdir(projectPath);
+    const added = await backend.handle({ v: 1, type: "project.add", requestId: requestId(), path: projectPath });
+    const projectId = (added.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { project: { id: ProjectId } } }).result.project.id;
+
+    const remembered = await backend.handle({ v: 1, type: "project.context.set", requestId: requestId(), projectId });
+    expect(remembered.messages[0]).toMatchObject({ type: "response", ok: true, result: { projectId } });
+    const listed = await backend.handle({ v: 1, type: "project.list", requestId: requestId() });
+    expect(listed.messages[0]).toMatchObject({ type: "response", ok: true, result: { recentProjectId: projectId } });
+
+    await backend.handle({ v: 1, type: "project.remove", requestId: requestId(), projectId });
+    const afterRemove = await backend.handle({ v: 1, type: "project.list", requestId: requestId() });
+    expect(afterRemove.messages[0]).toMatchObject({ type: "response", ok: true, result: { recentProjectId: null } });
+
+    const unknown = await backend.handle({ v: 1, type: "project.context.set", requestId: requestId(), projectId: crypto.randomUUID() as ProjectId });
+    expect(unknown.messages[0]).toMatchObject({ type: "response", ok: false, error: { code: "project_not_found" } });
+  });
+
   test("lists models, creates with an explicit model, and updates an idle session", async () => {
     const { backend } = await createBackend();
     const listed = await backend.handle({ v: 1, type: "model.list", requestId: requestId() });

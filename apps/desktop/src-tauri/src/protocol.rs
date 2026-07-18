@@ -61,6 +61,12 @@ pub enum ClientMessage {
         request_id: RequestId,
         project_id: ProjectId,
     },
+    #[serde(rename = "project.context.set", rename_all = "camelCase")]
+    ProjectContextSet {
+        v: u8,
+        request_id: RequestId,
+        project_id: Option<ProjectId>,
+    },
     #[serde(rename = "model.list", rename_all = "camelCase")]
     ModelList {
         v: u8,

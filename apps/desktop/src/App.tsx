@@ -32,6 +32,7 @@ function App() {
   const [draftModelKey, setDraftModelKey] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<Session>();
   const selectedSessionRef = useRef<string | undefined>(undefined);
+  const projectContextHydrated = useRef(false);
   const [draftProjectId, setDraftProjectId] = useState<string>();
   const [transcript, setTranscript] = useState<TranscriptItem[]>([]);
   const [streamingText, setStreamingText] = useState("");
@@ -77,11 +78,17 @@ function App() {
 
   async function refreshLists() {
     const [projectResult, sessionResult, modelResult] = await Promise.allSettled([
-        invoke<{ projects: Project[] }>("list_projects"),
+        invoke<{ projects: Project[]; recentProjectId: string | null }>("list_projects"),
         invoke<{ sessions: Session[] }>("list_sessions"),
         invoke<{ models: AvailableModel[]; selectedModel: string }>("list_models"),
       ]);
-    if (projectResult.status === "fulfilled") setProjects(projectResult.value.projects);
+    if (projectResult.status === "fulfilled") {
+      setProjects(projectResult.value.projects);
+      if (!projectContextHydrated.current) {
+        setDraftProjectId(projectResult.value.recentProjectId ?? undefined);
+        projectContextHydrated.current = true;
+      }
+    }
     if (sessionResult.status === "fulfilled") setSessions(sessionResult.value.sessions);
     if (modelResult.status === "fulfilled") {
       setModels(modelResult.value.models);
@@ -109,6 +116,15 @@ function App() {
     setTranscript([]);
     setStreamingText("");
     setError("");
+    void rememberProjectContext(projectId);
+  }
+
+  async function rememberProjectContext(projectId?: string) {
+    try {
+      await invoke("set_project_context", { projectId: projectId ?? null });
+    } catch (reason) {
+      setError(String(reason));
+    }
   }
 
   async function addProject() {
@@ -140,6 +156,7 @@ function App() {
       selectedSessionRef.current = session.id;
       setSelectedSession(result.session);
       setDraftProjectId(result.session.projectId);
+      void rememberProjectContext(result.session.projectId);
       setTranscript(toTranscriptItems(result.transcript));
       setStreamingText("");
       setError("");
@@ -284,7 +301,11 @@ function App() {
               </div>
               <div className="composer-field project-field">
                 <span className="composer-field-label">项目</span>
-                <Select className="project-select" aria-label="任务项目" selectedKey={draftProjectId ?? "none"} onSelectionChange={(key) => setDraftProjectId(key === "none" ? undefined : String(key))} isDisabled={Boolean(selectedSession)}>
+                <Select className="project-select" aria-label="任务项目" selectedKey={draftProjectId ?? "none"} onSelectionChange={(key) => {
+                  const projectId = key === "none" ? undefined : String(key);
+                  setDraftProjectId(projectId);
+                  void rememberProjectContext(projectId);
+                }} isDisabled={Boolean(selectedSession)}>
                   <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
                   <Select.Popover><ListBox>
                     <ListBox.Item id="none" textValue="无项目">无项目<ListBox.ItemIndicator /></ListBox.Item>

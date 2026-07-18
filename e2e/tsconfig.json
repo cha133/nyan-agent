@@ -1,0 +1,12 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "strict": true,
+    "noEmit": true,
+    "skipLibCheck": true,
+    "types": ["bun", "node", "@wdio/globals/types", "@wdio/mocha-framework", "@wdio/tauri-service"]
+  },
+  "include": ["./**/*.ts", "../scripts/e2e.ts"]
+}
