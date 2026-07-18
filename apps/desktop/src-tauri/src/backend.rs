@@ -242,17 +242,41 @@ impl BackendManager {
         self.command("session.list", json!({})).await
     }
 
-    pub async fn create_session(&self, project_id: Option<String>) -> Result<Value, String> {
-        let payload = match project_id {
-            Some(project_id) => json!({ "projectId": project_id }),
-            None => json!({}),
-        };
+    pub async fn list_models(&self, refresh: bool) -> Result<Value, String> {
+        self.command("model.list", json!({ "refresh": refresh }))
+            .await
+    }
+
+    pub async fn create_session(
+        &self,
+        project_id: Option<String>,
+        model: Option<String>,
+    ) -> Result<Value, String> {
+        let mut payload = json!({});
+        if let Some(project_id) = project_id {
+            payload["projectId"] = json!(project_id);
+        }
+        if let Some(model) = model {
+            payload["model"] = json!(model);
+        }
         self.command("session.create", payload).await
     }
 
     pub async fn load_session(&self, session_id: String) -> Result<Value, String> {
         self.command("session.load", json!({ "sessionId": session_id }))
             .await
+    }
+
+    pub async fn set_session_model(
+        &self,
+        session_id: String,
+        model: String,
+    ) -> Result<Value, String> {
+        self.command(
+            "session.model.set",
+            json!({ "sessionId": session_id, "model": model }),
+        )
+        .await
     }
 
     pub async fn remove_session(&self, session_id: String) -> Result<Value, String> {

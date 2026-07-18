@@ -60,11 +60,20 @@ async fn list_sessions(manager: State<'_, BackendManager>) -> Result<Value, Stri
 }
 
 #[tauri::command]
+async fn list_models(
+    manager: State<'_, BackendManager>,
+    refresh: Option<bool>,
+) -> Result<Value, String> {
+    manager.list_models(refresh.unwrap_or(false)).await
+}
+
+#[tauri::command]
 async fn create_session(
     manager: State<'_, BackendManager>,
     project_id: Option<String>,
+    model: Option<String>,
 ) -> Result<Value, String> {
-    manager.create_session(project_id).await
+    manager.create_session(project_id, model).await
 }
 
 #[tauri::command]
@@ -73,6 +82,15 @@ async fn load_session(
     session_id: String,
 ) -> Result<Value, String> {
     manager.load_session(session_id).await
+}
+
+#[tauri::command]
+async fn set_session_model(
+    manager: State<'_, BackendManager>,
+    session_id: String,
+    model: String,
+) -> Result<Value, String> {
+    manager.set_session_model(session_id, model).await
 }
 
 #[tauri::command]
@@ -112,8 +130,10 @@ pub fn run() {
             add_project,
             remove_project,
             list_sessions,
+            list_models,
             create_session,
             load_session,
+            set_session_model,
             remove_session,
             submit_prompt,
             cancel_turn

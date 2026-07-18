@@ -71,6 +71,8 @@ describe("model discovery and cache", () => {
     const models = await catalog.list({ refresh: true });
     expect(models.map((model) => model.key)).toEqual(["openai-main/static-model", "openai-main/dynamic-model"]);
     expect(await catalog.selectedModel(models)).toBe("openai-main/static-model");
+    await catalog.rememberModel("openai-main/dynamic-model");
+    expect(await catalog.selectedModel(models)).toBe("openai-main/dynamic-model");
     expect(requests[0].headers.get("authorization")).toBe("Bearer secret");
     expect(JSON.parse(await readFile(paths.modelCacheFile, "utf8")).providers[0].models).toEqual(["dynamic-model", "static-model"]);
   });

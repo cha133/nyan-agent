@@ -61,6 +61,13 @@ pub enum ClientMessage {
         request_id: RequestId,
         project_id: ProjectId,
     },
+    #[serde(rename = "model.list", rename_all = "camelCase")]
+    ModelList {
+        v: u8,
+        request_id: RequestId,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        refresh: Option<bool>,
+    },
     #[serde(rename = "session.list", rename_all = "camelCase")]
     SessionList { v: u8, request_id: RequestId },
     #[serde(rename = "session.create", rename_all = "camelCase")]
@@ -71,12 +78,21 @@ pub enum ClientMessage {
         project_id: Option<ProjectId>,
         #[serde(skip_serializing_if = "Option::is_none")]
         cwd: Option<String>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        model: Option<String>,
     },
     #[serde(rename = "session.load", rename_all = "camelCase")]
     SessionLoad {
         v: u8,
         request_id: RequestId,
         session_id: SessionId,
+    },
+    #[serde(rename = "session.model.set", rename_all = "camelCase")]
+    SessionModelSet {
+        v: u8,
+        request_id: RequestId,
+        session_id: SessionId,
+        model: String,
     },
     #[serde(rename = "session.remove", rename_all = "camelCase")]
     SessionRemove {

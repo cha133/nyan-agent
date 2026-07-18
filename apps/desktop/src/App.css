@@ -64,10 +64,15 @@ button:focus-visible { outline: 2px solid #ee8a6d; outline-offset: 2px; }
 .prompt-input { min-height: 76px; outline: none; color: #303136; line-height: 1.55; white-space: pre-wrap; }
 .prompt-placeholder { position: absolute; top: 0; left: 0; pointer-events: none; color: #a0a1a6; }
 .composer-toolbar { display: flex; align-items: end; gap: 9px; padding-top: 7px; }
-.project-field { display: flex; align-items: center; gap: 8px; }
+.composer-field { display: flex; align-items: center; gap: 8px; min-width: 0; }
 .composer-field-label { color: #777980; font-size: 12px; font-weight: 550; }
+.model-select { width: 210px; }
 .project-select { width: 150px; }
-.composer-model { overflow: hidden; flex: 1; color: #8a8b91; padding: 0 4px 9px; font-size: 12px; text-overflow: ellipsis; white-space: nowrap; }
+.model-option { display: grid; min-width: 0; }
+.model-option strong, .model-option small { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.model-option strong { font-size: 13px; font-weight: 600; }
+.model-option small { color: #8a8b91; font-size: 11px; font-weight: 400; }
+.composer-spacer { flex: 1; }
 .error-text { margin: 8px 4px 0; color: #b33f35; font-size: 12px; }
 
 .centered-shell { display: grid; min-height: 100vh; place-items: center; background: #f7f7f5; padding: 32px; }

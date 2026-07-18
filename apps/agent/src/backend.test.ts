@@ -13,7 +13,7 @@ const requestId = () => crypto.randomUUID() as RequestId;
 const config = parseConfig({
   version: 1,
   default_model: "test/model",
-  providers: [{ id: "test", kind: "openai-compatible", base_url: "https://example.test/v1", api_key: "secret", models: ["model"] }],
+  providers: [{ id: "test", kind: "openai-compatible", base_url: "https://example.test/v1", api_key: "secret", models: ["model", "other"] }],
 });
 
 async function createBackend(runner?: {
@@ -96,6 +96,25 @@ describe("agent backend", () => {
 
     expect(session).toMatchObject({ projectId, cwd: projectPath });
     expect(loaded.messages[0]).toMatchObject({ type: "response", ok: true, result: { session: { id: session.id }, transcript: [] } });
+  });
+
+  test("lists models, creates with an explicit model, and updates an idle session", async () => {
+    const { backend } = await createBackend();
+    const listed = await backend.handle({ v: 1, type: "model.list", requestId: requestId() });
+    expect(listed.messages[0]).toMatchObject({
+      type: "response",
+      ok: true,
+      result: { selectedModel: "test/model", models: [{ key: "test/model" }, { key: "test/other" }] },
+    });
+
+    const created = await backend.handle({ v: 1, type: "session.create", requestId: requestId(), cwd: "C:\\work", model: "test/other" });
+    const sessionId = (created.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { id: SessionId } }).result.id;
+    expect(created.messages[0]).toMatchObject({ result: { model: "test/other" } });
+
+    const updated = await backend.handle({ v: 1, type: "session.model.set", requestId: requestId(), sessionId, model: "test/model" });
+    expect(updated.messages[0]).toMatchObject({ type: "response", ok: true, result: { session: { id: sessionId, model: "test/model" } } });
+    const rejected = await backend.handle({ v: 1, type: "session.model.set", requestId: requestId(), sessionId, model: "missing/model" });
+    expect(rejected.messages[0]).toMatchObject({ type: "response", ok: false, error: { code: "invalid_model_key" } });
   });
 });
 

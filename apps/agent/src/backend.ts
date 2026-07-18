@@ -78,12 +78,22 @@ export class AgentBackend {
         const removed = await this.projects.remove(message.projectId);
         return { messages: [removed ? ok(message.requestId, { removed: true }) : failed(message.requestId, projectNotFound())] };
       }
+      case "model.list": {
+        if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
+        try {
+          const models = await this.catalog!.list({ refresh: message.refresh });
+          const selectedModel = await this.catalog!.selectedModel(models);
+          return { messages: [ok(message.requestId, { models, selectedModel })] };
+        } catch (error) {
+          return { messages: [failed(message.requestId, publicError(error))] };
+        }
+      }
       case "session.list":
         return { messages: [ok(message.requestId, { sessions: await this.store.list() })] };
       case "session.create": {
         if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
         try {
-          const model = await this.catalog!.selectedModel();
+          const model = await this.resolveModel(message.model);
           const project = message.projectId ? await this.projects.get(message.projectId) : undefined;
           if (message.projectId && !project) return { messages: [failed(message.requestId, projectNotFound())] };
           const session = await this.store.create(project?.path ?? message.cwd ?? homedir(), model, project?.id);
@@ -96,6 +106,22 @@ export class AgentBackend {
       case "session.load": {
         const session = await this.store.load(message.sessionId);
         return { messages: [session ? ok(message.requestId, { session, transcript: await this.store.readTranscript(message.sessionId) }) : failed(message.requestId, notFound())] };
+      }
+      case "session.model.set": {
+        if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
+        if (this.active?.sessionId === message.sessionId) {
+          return { messages: [failed(message.requestId, { code: "turn_in_progress", message: "The running task model cannot be changed" })] };
+        }
+        try {
+          const session = await this.store.load(message.sessionId);
+          if (!session) return { messages: [failed(message.requestId, notFound())] };
+          const model = await this.resolveModel(message.model);
+          const updated = await this.store.update(message.sessionId, { model });
+          await this.catalog!.rememberModel(model);
+          return { messages: [ok(message.requestId, { session: updated })] };
+        } catch (error) {
+          return { messages: [failed(message.requestId, publicError(error))] };
+        }
       }
       case "session.remove": {
         if (this.active?.sessionId === message.sessionId) {
@@ -135,6 +161,13 @@ export class AgentBackend {
       messages: [ok(message.requestId, { accepted: true, sessionId: session.id, turnId })],
       start: () => { active.done = this.execute(session.id, turnId, controller, message.prompt); },
     };
+  }
+
+  private async resolveModel(requested?: string): Promise<string> {
+    const models = await this.catalog!.list();
+    if (!requested) return this.catalog!.selectedModel(models);
+    if (!models.some((model) => model.key === requested)) throw new Error("invalid_model_key: The selected model is not available");
+    return requested;
   }
 
   private async execute(sessionId: SessionId, turnId: TurnId, controller: AbortController, prompt: string): Promise<void> {

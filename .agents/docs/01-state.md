@@ -77,8 +77,8 @@
 
 ## 下一步：阶段 4 — 产品外壳
 
-- 完成模型列表/最近模型选择，并补齐项目与任务交互细节。
 - 验证任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
+- 持久化新任务默认项目上下文，并补齐项目与任务交互细节。
 - 完成 Win11 Mica spike 与窗口细节打磨，再固化 renderer/桌面 E2E。
 
 ## 进行中：阶段 4 — 产品外壳
@@ -88,14 +88,16 @@
 - [x] Rust/Tauri 暴露项目、任务和提交命令；原生目录选择使用 Tauri dialog plugin。
 - [x] 将阶段 3 验证页替换为 1200×800（最小 960×640）的白色双栏产品外壳，接入 HeroUI v3 Button/Select、Lucide 图标、独立 5 条展开状态和任务导航。
 - [x] 接入 Lexical 纯文本编辑器与 `react-markdown + remark-gfm` 静态 assistant block；恢复历史时从 transcript JSONL 映射展示项。
-- [ ] 增加模型列表与最近模型选择 UI，补齐新任务默认上下文的持久化。
+- [x] 增加模型列表与最近模型选择 UI：新任务可显式选模型，既有闲置任务可更新模型，运行中禁止切换；有效选择在创建/更新任务时写入共享最近模型 state。
+- [ ] 补齐新任务默认项目上下文的持久化。
 - [ ] 完成 Mica/window effects spike 和稳定 E2E。
 
 ### 阶段 4 当前验证记录
 
-- protocol 7 项、agent 18 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除和项目 cwd 绑定覆盖。
+- protocol 7 项、agent 19 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除、项目 cwd 绑定、模型列表/显式创建/更新和最近模型覆盖。
 - `bun run check`、`bun run test`、`bun run build` 通过；desktop production bundle 仅有现阶段可接受的大 chunk 提示。
 - 使用 `bun run dev:inspect` 启动真实 Tauri，通过 `chrome-cdp --browser tauri` 自动发现 `DevToolsActivePort`；实测 1200×800 首屏、白色主题、无障碍树和 Lexical 中文输入，console warning 与未处理异常均为空。
+- 使用隔离的静态 provider 配置实测 HeroUI 模型 Select：可展示 provider/model、切换选项，并与项目选择、发送按钮保持同一行；修复异步模型加载导致的 uncontrolled → controlled warning 后复查 console 为空。
 
 ## 后续实施队列
 
@@ -134,7 +136,6 @@
 
 ## 最近一轮没有做
 
-- 没有实现模型选择 UI；阶段 3 后端按最近模型、默认模型、首个可用模型依次选择。
 - 没有接入 WebdriverIO Tauri E2E；先用 `dev:inspect` + CDP 形成现场调试闭环，待阶段 4 UI 结构稳定后再固化自动化用例。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。

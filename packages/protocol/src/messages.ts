@@ -21,9 +21,11 @@ export type ClientMessage =
   | { v: 1; type: "project.list"; requestId: RequestId }
   | { v: 1; type: "project.add"; requestId: RequestId; path: string }
   | { v: 1; type: "project.remove"; requestId: RequestId; projectId: ProjectId }
+  | { v: 1; type: "model.list"; requestId: RequestId; refresh?: boolean }
   | { v: 1; type: "session.list"; requestId: RequestId }
-  | { v: 1; type: "session.create"; requestId: RequestId; projectId?: ProjectId; cwd?: string }
+  | { v: 1; type: "session.create"; requestId: RequestId; projectId?: ProjectId; cwd?: string; model?: string }
   | { v: 1; type: "session.load"; requestId: RequestId; sessionId: SessionId }
+  | { v: 1; type: "session.model.set"; requestId: RequestId; sessionId: SessionId; model: string }
   | { v: 1; type: "session.remove"; requestId: RequestId; sessionId: SessionId }
   | { v: 1; type: "prompt.submit"; requestId: RequestId; sessionId: SessionId; prompt: string }
   | { v: 1; type: "turn.cancel"; requestId: RequestId; sessionId: SessionId; turnId: TurnId };
@@ -63,9 +65,11 @@ const clientTypes = new Set<ClientMessage["type"]>([
   "project.list",
   "project.add",
   "project.remove",
+  "model.list",
   "session.list",
   "session.create",
   "session.load",
+  "session.model.set",
   "session.remove",
   "prompt.submit",
   "turn.cancel",
@@ -105,13 +109,21 @@ export function parseClientMessage(value: unknown): ClientMessage {
     case "project.remove":
       requireUuid(message, "projectId");
       break;
+    case "model.list":
+      if (message.refresh !== undefined && typeof message.refresh !== "boolean") throw invalid("refresh must be a boolean");
+      break;
     case "session.create":
       if (message.projectId !== undefined) requireUuid(message, "projectId");
       if (message.cwd !== undefined) requireString(message, "cwd");
+      if (message.model !== undefined) requireString(message, "model");
       break;
     case "session.load":
     case "session.remove":
       requireUuid(message, "sessionId");
+      break;
+    case "session.model.set":
+      requireUuid(message, "sessionId");
+      requireString(message, "model");
       break;
     case "prompt.submit":
       requireUuid(message, "sessionId");

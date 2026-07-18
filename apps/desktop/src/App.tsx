@@ -18,6 +18,7 @@ type BackendStatus =
 
 type Project = { id: string; name: string; path: string; createdAt: string; updatedAt: string };
 type Session = { id: string; projectId?: string; cwd: string; title: string; model: string; status: string; createdAt: string; updatedAt: string };
+type AvailableModel = { key: string; providerId: string; modelId: string; source: "static" | "discovered"; stale: boolean; unavailable?: boolean };
 type TranscriptRecord = { seq: number; createdAt: string; turnId?: string; kind: string; payload: unknown };
 type TranscriptItem = { id: string; role: "user" | "assistant" | "status"; text: string };
 
@@ -27,6 +28,8 @@ function App() {
   const [status, setStatus] = useState<BackendStatus>({ state: "starting" });
   const [projects, setProjects] = useState<Project[]>([]);
   const [sessions, setSessions] = useState<Session[]>([]);
+  const [models, setModels] = useState<AvailableModel[]>([]);
+  const [draftModelKey, setDraftModelKey] = useState<string>();
   const [selectedSession, setSelectedSession] = useState<Session>();
   const selectedSessionRef = useRef<string | undefined>(undefined);
   const [draftProjectId, setDraftProjectId] = useState<string>();
@@ -73,16 +76,19 @@ function App() {
   }, [status.state]);
 
   async function refreshLists() {
-    try {
-      const [projectResult, sessionResult] = await Promise.all([
+    const [projectResult, sessionResult, modelResult] = await Promise.allSettled([
         invoke<{ projects: Project[] }>("list_projects"),
         invoke<{ sessions: Session[] }>("list_sessions"),
+        invoke<{ models: AvailableModel[]; selectedModel: string }>("list_models"),
       ]);
-      setProjects(projectResult.projects);
-      setSessions(sessionResult.sessions);
-    } catch (reason) {
-      setError(String(reason));
+    if (projectResult.status === "fulfilled") setProjects(projectResult.value.projects);
+    if (sessionResult.status === "fulfilled") setSessions(sessionResult.value.sessions);
+    if (modelResult.status === "fulfilled") {
+      setModels(modelResult.value.models);
+      setDraftModelKey((current) => current && modelResult.value.models.some((model) => model.key === current) ? current : modelResult.value.selectedModel);
     }
+    const failure = [projectResult, sessionResult, modelResult].find((result) => result.status === "rejected");
+    if (failure?.status === "rejected") setError(String(failure.reason));
   }
 
   async function restartBackend() {
@@ -153,6 +159,23 @@ function App() {
     }
   }
 
+  async function changeModel(key: string) {
+    if (submitting || !key) return;
+    setError("");
+    if (!selectedSession) {
+      setDraftModelKey(key);
+      return;
+    }
+    try {
+      const result = await invoke<{ session: Session }>("set_session_model", { sessionId: selectedSession.id, model: key });
+      setSelectedSession(result.session);
+      setSessions((current) => current.map((session) => session.id === result.session.id ? result.session : session));
+      setDraftModelKey(key);
+    } catch (reason) {
+      setError(String(reason));
+    }
+  }
+
   async function submitPrompt() {
     const text = prompt.trim();
     if (!text || submitting) return;
@@ -161,7 +184,7 @@ function App() {
     try {
       let session = selectedSession;
       if (!session) {
-        const result = await invoke<Session>("create_session", { projectId: draftProjectId ?? null });
+        const result = await invoke<Session>("create_session", { projectId: draftProjectId ?? null, model: draftModelKey ?? null });
         session = result;
         selectedSessionRef.current = session.id;
         setSelectedSession(session);
@@ -195,6 +218,10 @@ function App() {
   const unboundSessions = sessions.filter((session) => !session.projectId || !projectIds.has(session.projectId));
   const title = selectedSession?.title ?? "新任务";
   const activeProject = projects.find((project) => project.id === (selectedSession?.projectId ?? draftProjectId));
+  const activeModelKey = selectedSession?.model ?? draftModelKey;
+  const displayModels = selectedSession && !models.some((model) => model.key === selectedSession.model)
+    ? [{ key: selectedSession.model, providerId: "不可用", modelId: selectedSession.model, source: "static" as const, stale: false, unavailable: true }, ...models]
+    : models;
 
   return (
     <main className="product-shell">
@@ -243,7 +270,19 @@ function App() {
           <div className="composer">
             <PromptEditor key={editorKey} onChange={setPrompt} disabled={submitting} />
             <div className="composer-toolbar">
-              <div className="project-field">
+              <div className="composer-field model-field">
+                <span className="composer-field-label">模型</span>
+                <Select className="model-select" aria-label="任务模型" placeholder="无可用模型" selectedKey={activeModelKey ?? null} disabledKeys={displayModels.filter((model) => model.unavailable).map((model) => model.key)} onSelectionChange={(key) => void changeModel(String(key))} isDisabled={submitting || models.length === 0}>
+                  <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+                  <Select.Popover><ListBox>
+                    {displayModels.map((model) => <ListBox.Item id={model.key} key={model.key} textValue={`${model.providerId} ${model.modelId}`}>
+                      <span className="model-option"><strong>{model.modelId}</strong><small>{model.providerId}{model.stale ? " · 缓存已过期" : ""}</small></span>
+                      <ListBox.ItemIndicator />
+                    </ListBox.Item>)}
+                  </ListBox></Select.Popover>
+                </Select>
+              </div>
+              <div className="composer-field project-field">
                 <span className="composer-field-label">项目</span>
                 <Select className="project-select" aria-label="任务项目" selectedKey={draftProjectId ?? "none"} onSelectionChange={(key) => setDraftProjectId(key === "none" ? undefined : String(key))} isDisabled={Boolean(selectedSession)}>
                   <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
@@ -253,7 +292,7 @@ function App() {
                   </ListBox></Select.Popover>
                 </Select>
               </div>
-              <div className="composer-model">{selectedSession?.model ?? "自动选择模型"}</div>
+              <div className="composer-spacer" />
               {submitting
                 ? <Button isIconOnly variant="danger" onPress={stopTurn} isDisabled={!activeTurn} aria-label="停止"><Square size={16} fill="currentColor" /></Button>
                 : <Button isIconOnly onPress={submitPrompt} isDisabled={!prompt.trim()} aria-label="发送"><Send size={17} /></Button>}
