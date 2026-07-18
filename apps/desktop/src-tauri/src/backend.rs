@@ -56,7 +56,6 @@ struct BackendInner {
     lifecycle: Mutex<()>,
     generation: AtomicU64,
     exit_notify: Notify,
-    active_session: Mutex<Option<String>>,
 }
 
 #[derive(Clone)]
@@ -77,7 +76,6 @@ impl BackendManager {
                 lifecycle: Mutex::new(()),
                 generation: AtomicU64::new(0),
                 exit_notify: Notify::new(),
-                active_session: Mutex::new(None),
             }),
             agent_entry,
         }
@@ -227,34 +225,45 @@ impl BackendManager {
         self.start().await
     }
 
-    pub async fn submit_prompt(&self, prompt: String) -> Result<Value, String> {
+    pub async fn list_projects(&self) -> Result<Value, String> {
+        self.command("project.list", json!({})).await
+    }
+
+    pub async fn add_project(&self, path: String) -> Result<Value, String> {
+        self.command("project.add", json!({ "path": path })).await
+    }
+
+    pub async fn remove_project(&self, project_id: String) -> Result<Value, String> {
+        self.command("project.remove", json!({ "projectId": project_id }))
+            .await
+    }
+
+    pub async fn list_sessions(&self) -> Result<Value, String> {
+        self.command("session.list", json!({})).await
+    }
+
+    pub async fn create_session(&self, project_id: Option<String>) -> Result<Value, String> {
+        let payload = match project_id {
+            Some(project_id) => json!({ "projectId": project_id }),
+            None => json!({}),
+        };
+        self.command("session.create", payload).await
+    }
+
+    pub async fn load_session(&self, session_id: String) -> Result<Value, String> {
+        self.command("session.load", json!({ "sessionId": session_id }))
+            .await
+    }
+
+    pub async fn remove_session(&self, session_id: String) -> Result<Value, String> {
+        self.command("session.remove", json!({ "sessionId": session_id }))
+            .await
+    }
+
+    pub async fn submit_prompt(&self, session_id: String, prompt: String) -> Result<Value, String> {
         if !matches!(self.status().await, BackendStatus::Ready { .. }) {
             return Err("Bun backend is not ready.".to_owned());
         }
-        let session_id = if let Some(session_id) = self.inner.active_session.lock().await.clone() {
-            session_id
-        } else {
-            let create_request_id = RequestId::new();
-            let created = self
-                .request(
-                    json!({
-                        "v": PROTOCOL_VERSION,
-                        "type": "session.create",
-                        "requestId": create_request_id,
-                        "cwd": std::env::current_dir().map_err(|error| error.to_string())?
-                    }),
-                    create_request_id,
-                )
-                .await?;
-            ensure_ok(&created)?;
-            let session_id = created
-                .pointer("/result/sessionId")
-                .and_then(Value::as_str)
-                .ok_or_else(|| "The backend did not return a session ID.".to_owned())?
-                .to_owned();
-            *self.inner.active_session.lock().await = Some(session_id.clone());
-            session_id
-        };
         let prompt_request_id = RequestId::new();
         let response = self
             .request(
@@ -270,6 +279,20 @@ impl BackendManager {
             .await?;
         ensure_ok(&response)?;
         Ok(response)
+    }
+
+    async fn command(&self, message_type: &str, payload: Value) -> Result<Value, String> {
+        if !matches!(self.status().await, BackendStatus::Ready { .. }) {
+            return Err("Bun backend is not ready.".to_owned());
+        }
+        let request_id = RequestId::new();
+        let mut message = payload.as_object().cloned().unwrap_or_default();
+        message.insert("v".to_owned(), json!(PROTOCOL_VERSION));
+        message.insert("type".to_owned(), json!(message_type));
+        message.insert("requestId".to_owned(), json!(request_id));
+        let response = self.request(Value::Object(message), request_id).await?;
+        ensure_ok(&response)?;
+        Ok(response["result"].clone())
     }
 
     pub async fn cancel_turn(&self, session_id: String, turn_id: String) -> Result<Value, String> {

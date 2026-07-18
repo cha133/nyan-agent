@@ -3,6 +3,7 @@ const UUID_V4 = /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f
 type Brand<T, Name extends string> = T & { readonly __brand: Name };
 
 export type RequestId = Brand<string, "RequestId">;
+export type ProjectId = Brand<string, "ProjectId">;
 export type SessionId = Brand<string, "SessionId">;
 export type TurnId = Brand<string, "TurnId">;
 export type ToolExecutionId = Brand<string, "ToolExecutionId">;
@@ -17,8 +18,13 @@ export type ProtocolError = {
 export type ClientMessage =
   | { v: 1; type: "initialize"; requestId: RequestId; client: { name: string; version: string } }
   | { v: 1; type: "shutdown"; requestId: RequestId }
-  | { v: 1; type: "session.create"; requestId: RequestId; cwd: string }
+  | { v: 1; type: "project.list"; requestId: RequestId }
+  | { v: 1; type: "project.add"; requestId: RequestId; path: string }
+  | { v: 1; type: "project.remove"; requestId: RequestId; projectId: ProjectId }
+  | { v: 1; type: "session.list"; requestId: RequestId }
+  | { v: 1; type: "session.create"; requestId: RequestId; projectId?: ProjectId; cwd?: string }
   | { v: 1; type: "session.load"; requestId: RequestId; sessionId: SessionId }
+  | { v: 1; type: "session.remove"; requestId: RequestId; sessionId: SessionId }
   | { v: 1; type: "prompt.submit"; requestId: RequestId; sessionId: SessionId; prompt: string }
   | { v: 1; type: "turn.cancel"; requestId: RequestId; sessionId: SessionId; turnId: TurnId };
 
@@ -54,8 +60,13 @@ type TurnEventBase<Type extends string> = {
 const clientTypes = new Set<ClientMessage["type"]>([
   "initialize",
   "shutdown",
+  "project.list",
+  "project.add",
+  "project.remove",
+  "session.list",
   "session.create",
   "session.load",
+  "session.remove",
   "prompt.submit",
   "turn.cancel",
 ]);
@@ -88,10 +99,18 @@ export function parseClientMessage(value: unknown): ClientMessage {
       requireString(message.client, "name");
       requireString(message.client, "version");
       break;
+    case "project.add":
+      requireString(message, "path");
+      break;
+    case "project.remove":
+      requireUuid(message, "projectId");
+      break;
     case "session.create":
-      requireString(message, "cwd");
+      if (message.projectId !== undefined) requireUuid(message, "projectId");
+      if (message.cwd !== undefined) requireString(message, "cwd");
       break;
     case "session.load":
+    case "session.remove":
       requireUuid(message, "sessionId");
       break;
     case "prompt.submit":

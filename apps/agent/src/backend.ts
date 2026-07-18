@@ -1,10 +1,12 @@
 import type { LanguageModel, ModelMessage } from "ai";
 import type { ClientMessage, ProtocolError, ServerMessage, SessionId, TurnEvent, TurnId } from "@nyan/protocol";
+import { homedir } from "node:os";
 import { AgentRunner, fallbackTitle, type RunResult, type RunnerEvent } from "./agent-runner";
 import { type NyanConfig, ConfigError, loadConfig } from "./config";
 import { ModelCatalog } from "./models";
 import { type NyanPaths, resolveNyanPaths } from "./paths";
 import { ProviderRegistry } from "./providers";
+import { ProjectStore } from "./projects";
 import { SessionStore } from "./sessions";
 
 type HandleResult = {
@@ -32,6 +34,7 @@ type TurnEventPayload = TurnEvent extends infer Event ? Event extends TurnEvent 
 export class AgentBackend {
   private readonly paths: NyanPaths;
   private readonly store: SessionStore;
+  private readonly projects: ProjectStore;
   private readonly runnerFactory: (model: LanguageModel) => Runner;
   private readonly emit: (message: ServerMessage) => void | Promise<void>;
   private config?: NyanConfig;
@@ -44,6 +47,7 @@ export class AgentBackend {
   constructor(options: BackendOptions = {}) {
     this.paths = options.paths ?? resolveNyanPaths();
     this.store = new SessionStore(this.paths);
+    this.projects = new ProjectStore(this.paths);
     this.config = options.config;
     this.runnerFactory = options.runnerFactory ?? ((model) => new AgentRunner(model));
     this.emit = options.emit ?? (() => {});
@@ -62,11 +66,27 @@ export class AgentBackend {
           beforeExit: async () => { await this.active?.done; },
         };
       }
+      case "project.list":
+        return { messages: [ok(message.requestId, { projects: await this.projects.list() })] };
+      case "project.add":
+        try {
+          return { messages: [ok(message.requestId, { project: await this.projects.add(message.path) })] };
+        } catch (error) {
+          return { messages: [failed(message.requestId, publicError(error))] };
+        }
+      case "project.remove": {
+        const removed = await this.projects.remove(message.projectId);
+        return { messages: [removed ? ok(message.requestId, { removed: true }) : failed(message.requestId, projectNotFound())] };
+      }
+      case "session.list":
+        return { messages: [ok(message.requestId, { sessions: await this.store.list() })] };
       case "session.create": {
         if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
         try {
           const model = await this.catalog!.selectedModel();
-          const session = await this.store.create(message.cwd, model);
+          const project = message.projectId ? await this.projects.get(message.projectId) : undefined;
+          if (message.projectId && !project) return { messages: [failed(message.requestId, projectNotFound())] };
+          const session = await this.store.create(project?.path ?? message.cwd ?? homedir(), model, project?.id);
           await this.catalog!.rememberModel(model);
           return { messages: [ok(message.requestId, { ...session, sessionId: session.id })] };
         } catch (error) {
@@ -75,7 +95,14 @@ export class AgentBackend {
       }
       case "session.load": {
         const session = await this.store.load(message.sessionId);
-        return { messages: [session ? ok(message.requestId, session) : failed(message.requestId, notFound())] };
+        return { messages: [session ? ok(message.requestId, { session, transcript: await this.store.readTranscript(message.sessionId) }) : failed(message.requestId, notFound())] };
+      }
+      case "session.remove": {
+        if (this.active?.sessionId === message.sessionId) {
+          return { messages: [failed(message.requestId, { code: "turn_in_progress", message: "The running task cannot be removed" })] };
+        }
+        const removed = await this.store.remove(message.sessionId);
+        return { messages: [removed ? ok(message.requestId, { removed: true }) : failed(message.requestId, notFound())] };
       }
       case "prompt.submit":
         return this.submit(message);
@@ -191,12 +218,13 @@ function failed(requestId: Extract<ClientMessage, { requestId: unknown }>["reque
 }
 
 function notFound(): ProtocolError { return { code: "session_not_found", message: "Session was not found" }; }
+function projectNotFound(): ProtocolError { return { code: "project_not_found", message: "Project was not found" }; }
 
 function publicError(error: unknown): ProtocolError {
   if (error instanceof ConfigError) return { code: error.code, message: error.message };
   const message = error instanceof Error ? error.message : "Unknown error";
   const [candidate] = message.split(":", 1);
-  const known = new Set(["config_missing", "config_invalid", "model_not_configured", "model_discovery_failed", "provider_not_found", "invalid_model_key", "session_not_found"]);
+  const known = new Set(["config_missing", "config_invalid", "model_not_configured", "model_discovery_failed", "provider_not_found", "invalid_model_key", "session_not_found", "project_not_found", "project_path_invalid"]);
   const code = known.has(candidate) ? candidate : "model_request_failed";
   return { code, message: code === "model_request_failed" ? "The model request failed" : message };
 }

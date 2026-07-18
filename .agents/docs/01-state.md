@@ -17,6 +17,7 @@
 - [x] 完成阶段 2 协议与进程垂直切片：共享协议、双端 NDJSON codec、Bun echo backend、Rust supervisor 和 Tauri Channel 已贯通。
 - [x] 完成阶段 3 配置、provider 与最小 turn：真实 AI SDK 回合、停止、标题和 JSONL 恢复已接入桌面端。
 - [x] 建立 Tauri WebView2 可观察开发入口：`dev:inspect` 仅在子进程环境启用随机 CDP 端口，可供 agent 读取 DOM、截图、console 与异常。
+- [x] 完成阶段 4 第一版垂直切片：项目/任务文件存储与协议、原生目录选择、白色双栏产品外壳、侧栏导航、Lexical 输入和静态 Markdown transcript。
 
 ## 已完成：阶段 1 — workspace 骨架
 
@@ -76,9 +77,25 @@
 
 ## 下一步：阶段 4 — 产品外壳
 
-- 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型选择。
-- 实现侧栏导航、Lexical 纯文本输入、静态 Markdown transcript block。
-- 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
+- 完成模型列表/最近模型选择，并补齐项目与任务交互细节。
+- 验证任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
+- 完成 Win11 Mica spike 与窗口细节打磨，再固化 renderer/桌面 E2E。
+
+## 进行中：阶段 4 — 产品外壳
+
+- [x] 增加 `projects.json` 原子存储以及项目 list/add/remove；项目路径必须是现有目录，重复添加稳定去重。
+- [x] 增加 session list/load/remove，metadata 可绑定 project ID；绑定项目使用项目目录作为 cwd，无项目任务回退到用户家目录。
+- [x] Rust/Tauri 暴露项目、任务和提交命令；原生目录选择使用 Tauri dialog plugin。
+- [x] 将阶段 3 验证页替换为 1200×800（最小 960×640）的白色双栏产品外壳，接入 HeroUI v3 Button/Select、Lucide 图标、独立 5 条展开状态和任务导航。
+- [x] 接入 Lexical 纯文本编辑器与 `react-markdown + remark-gfm` 静态 assistant block；恢复历史时从 transcript JSONL 映射展示项。
+- [ ] 增加模型列表与最近模型选择 UI，补齐新任务默认上下文的持久化。
+- [ ] 完成 Mica/window effects spike 和稳定 E2E。
+
+### 阶段 4 当前验证记录
+
+- protocol 7 项、agent 18 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除和项目 cwd 绑定覆盖。
+- `bun run check`、`bun run test`、`bun run build` 通过；desktop production bundle 仅有现阶段可接受的大 chunk 提示。
+- 使用 `bun run dev:inspect` 启动真实 Tauri，通过 `chrome-cdp --browser tauri` 自动发现 `DevToolsActivePort`；实测 1200×800 首屏、白色主题、无障碍树和 Lexical 中文输入，console warning 与未处理异常均为空。
 
 ## 后续实施队列
 
@@ -99,8 +116,8 @@
 ### 阶段 4 — 产品外壳
 
 - [ ] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
-- [ ] 实现侧栏每组 5 条的展开/折叠、任务导航和运行中只读查看。
-- [ ] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
+- [x] 实现侧栏每组 5 条的展开/折叠、任务导航和运行中只读查看。
+- [x] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
 - [ ] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
 
 ### 阶段 5 — 三个工具
@@ -117,8 +134,6 @@
 
 ## 最近一轮没有做
 
-- 没有实现正式项目/任务 CRUD、侧栏与多任务导航；这些进入阶段 4。
-- 没有接入 Lexical/Markdown 正式 transcript 组件；当前页面显示完整文本与底层事件活动。
 - 没有实现模型选择 UI；阶段 3 后端按最近模型、默认模型、首个可用模型依次选择。
 - 没有接入 WebdriverIO Tauri E2E；先用 `dev:inspect` + CDP 形成现场调试闭环，待阶段 4 UI 结构稳定后再固化自动化用例。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。

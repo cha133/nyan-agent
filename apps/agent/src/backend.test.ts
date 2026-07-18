@@ -1,7 +1,7 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelMessage } from "ai";
-import type { RequestId, ServerMessage, SessionId, TurnId } from "@nyan/protocol";
-import { mkdtemp } from "node:fs/promises";
+import type { ProjectId, RequestId, ServerMessage, SessionId, TurnId } from "@nyan/protocol";
+import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import type { RunnerEvent } from "./agent-runner";
@@ -32,7 +32,7 @@ async function createBackend(runner?: {
     async title() { return "Cat task"; },
   };
   const backend = new AgentBackend({ paths, config, runnerFactory: () => runner ?? defaultRunner, emit: (event) => { events.push(event); } });
-  return { backend, events };
+  return { backend, events, root };
 }
 
 async function createSession(backend: AgentBackend): Promise<SessionId> {
@@ -82,6 +82,20 @@ describe("agent backend", () => {
     const { backend } = await createBackend();
     const response = await backend.handle({ v: 1, type: "prompt.submit", requestId: requestId(), sessionId: crypto.randomUUID() as SessionId, prompt: "hello" });
     expect(response.messages[0]).toMatchObject({ type: "response", ok: false, error: { code: "session_not_found" } });
+  });
+
+  test("binds new sessions to a persisted project and returns transcript on load", async () => {
+    const { backend, root } = await createBackend();
+    const projectPath = join(root, "workspace");
+    await mkdir(projectPath);
+    const added = await backend.handle({ v: 1, type: "project.add", requestId: requestId(), path: projectPath });
+    const projectId = (added.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { project: { id: ProjectId } } }).result.project.id;
+    const created = await backend.handle({ v: 1, type: "session.create", requestId: requestId(), projectId });
+    const session = (created.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { id: SessionId; projectId: ProjectId; cwd: string } }).result;
+    const loaded = await backend.handle({ v: 1, type: "session.load", requestId: requestId(), sessionId: session.id });
+
+    expect(session).toMatchObject({ projectId, cwd: projectPath });
+    expect(loaded.messages[0]).toMatchObject({ type: "response", ok: true, result: { session: { id: session.id }, transcript: [] } });
   });
 });
 

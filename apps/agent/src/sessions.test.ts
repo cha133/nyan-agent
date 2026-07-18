@@ -54,4 +54,18 @@ describe("session store", () => {
     expect((await store.load(session.id))?.title).toBe("Concurrent title");
     expect((await store.load(session.id))?.status).toBe("running");
   });
+
+  test("lists newest sessions first and removes their persisted directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "nyan-session-list-"));
+    const paths = resolveNyanPaths({ XDG_CONFIG_HOME: join(root, "cfg"), XDG_DATA_HOME: join(root, "data"), XDG_STATE_HOME: join(root, "state"), XDG_CACHE_HOME: join(root, "cache") }, root);
+    let tick = 0;
+    const store = new SessionStore(paths, () => new Date(`2026-01-01T00:00:0${tick++}Z`));
+    const first = await store.create("C:\\one", "provider/model");
+    const second = await store.create("C:\\two", "provider/model");
+
+    expect((await store.list()).map((session) => session.id)).toEqual([second.id, first.id]);
+    expect(await store.remove(first.id)).toBe(true);
+    expect(await store.load(first.id)).toBeUndefined();
+    expect(await store.remove(first.id)).toBe(false);
+  });
 });

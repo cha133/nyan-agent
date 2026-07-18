@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 3 已完成；桌面端已接通可配置 provider 的真实无工具模型回合、停止、标题生成、JSONL 会话持久化与中断恢复，并具备可供 agent 连接的 WebView2/CDP 开发模式。
+- 当前状态：阶段 4 进行中；项目/任务数据层、正式白色产品外壳、侧栏导航、Lexical 输入和静态 Markdown transcript 已形成第一版垂直切片。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 
@@ -33,8 +33,13 @@
 ## 开发与调试
 
 - `bun run dev`：普通 Tauri 开发模式。
-- `bun run dev:inspect`：仅在本次开发子进程启用 `--remote-debugging-port=0`；agent 可通过 `DevToolsActivePort` 连接当前 Tauri WebView2，读取 DOM、无障碍树、截图、console、浏览器日志和未处理异常。
+- `bun run dev:inspect`：需要调试 renderer 时必须使用此入口；它只在本次开发子进程启用随机 CDP 端口（`--remote-debugging-port=0`），不会污染普通启动或全局环境。
 - 本机 `chrome-cdp` 技能位于 `C:\Users\Admin\.agents\skills\chrome-cdp`；已增加 `console`、`errors`、`console-watch`、`console-clear`。它不属于本仓库，重新安装技能可能覆盖本地增强。
+- 启动完成后运行 `node C:\Users\Admin\.agents\skills\chrome-cdp\scripts\cdp.mjs --browser tauri list`。脚本会从 nyan-agent 的 WebView2 用户数据目录发现 `DevToolsActivePort`；复制输出中的唯一 target ID 前缀，并在后续所有命令中始终传 `--browser tauri`。
+- 常用检查：`snap <target> --compact` 读取无障碍树，`shot <target> <absolute.png>` 截图，`console <target> warning 100` 读取 console，`errors <target> 100` 读取未处理异常。复现时序问题前先运行 `console-watch <target> <ms> warning 100`；需要重新采集时使用 `console-clear <target>`。
+- 交互调试优先用 `click <target> <selector>` 和 `type <target> <text>`；富文本/`contenteditable` 若 selector 点击未取得焦点，可根据 `shot` 输出的 DPR 换算 CSS 坐标后使用 `clickxy`，再用 `eval` 验证 `document.activeElement` 与 DOM 状态。
+- `nav`/页面重载会主动丢弃旧页面的 Tauri 异步 callback，紧邻重载出现 “Couldn't find callback id” warning 属于调试操作副作用；页面稳定后先 `console-clear`，再用 `console-watch` 复查，不能把旧 warning 当成应用运行时故障。
+- 结束时停止 `dev:inspect` 启动的父进程，确认 Tauri、Vite 与 Bun 子进程一起退出。不要用普通 `bun run dev` 代替本流程，否则不会生成可发现的 CDP 端点。
 - WebdriverIO Tauri Service 尚未接入；计划在阶段 4 UI 结构稳定后，用于固化 renderer 与真实桌面 E2E，而不是替代现场 CDP 调试。
 
 ## 用户提供的参考材料

@@ -1,11 +1,17 @@
 {
   "clientMessages": [
     { "v": 1, "type": "initialize", "requestId": "00000000-0000-4000-8000-000000000001", "client": { "name": "nyan-desktop", "version": "0.1.0" } },
-    { "v": 1, "type": "session.create", "requestId": "00000000-0000-4000-8000-000000000002", "cwd": "C:\\Dev\\nyan-agent" },
-    { "v": 1, "type": "session.load", "requestId": "00000000-0000-4000-8000-000000000003", "sessionId": "10000000-0000-4000-8000-000000000001" },
-    { "v": 1, "type": "prompt.submit", "requestId": "00000000-0000-4000-8000-000000000004", "sessionId": "10000000-0000-4000-8000-000000000001", "prompt": "你好，nyan" },
-    { "v": 1, "type": "turn.cancel", "requestId": "00000000-0000-4000-8000-000000000005", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001" },
-    { "v": 1, "type": "shutdown", "requestId": "00000000-0000-4000-8000-000000000006" }
+    { "v": 1, "type": "project.list", "requestId": "00000000-0000-4000-8000-000000000002" },
+    { "v": 1, "type": "project.add", "requestId": "00000000-0000-4000-8000-000000000003", "path": "C:\\Dev\\nyan-agent" },
+    { "v": 1, "type": "project.remove", "requestId": "00000000-0000-4000-8000-000000000004", "projectId": "50000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "session.list", "requestId": "00000000-0000-4000-8000-000000000005" },
+    { "v": 1, "type": "session.create", "requestId": "00000000-0000-4000-8000-000000000006", "projectId": "50000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "session.load", "requestId": "00000000-0000-4000-8000-000000000007", "sessionId": "10000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "session.remove", "requestId": "00000000-0000-4000-8000-000000000008", "sessionId": "10000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "prompt.submit", "requestId": "00000000-0000-4000-8000-000000000009", "sessionId": "10000000-0000-4000-8000-000000000001", "prompt": "你好，nyan" },
+    { "v": 1, "type": "turn.cancel", "requestId": "00000000-0000-4000-8000-000000000010", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "session.create", "requestId": "00000000-0000-4000-8000-000000000011", "cwd": "C:\\Dev\\nyan-agent" },
+    { "v": 1, "type": "shutdown", "requestId": "00000000-0000-4000-8000-000000000012" }
   ],
   "serverMessages": [
     { "v": 1, "type": "initialized", "requestId": "00000000-0000-4000-8000-000000000001", "backend": { "name": "nyan-agent", "version": "0.1.0", "bunVersion": "1.3.14" } },

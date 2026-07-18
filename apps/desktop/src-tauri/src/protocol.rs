@@ -21,6 +21,7 @@ macro_rules! domain_id {
 }
 
 domain_id!(RequestId);
+domain_id!(ProjectId);
 domain_id!(SessionId);
 domain_id!(TurnId);
 domain_id!(ToolExecutionId);
@@ -46,14 +47,39 @@ pub enum ClientMessage {
     },
     #[serde(rename = "shutdown", rename_all = "camelCase")]
     Shutdown { v: u8, request_id: RequestId },
+    #[serde(rename = "project.list", rename_all = "camelCase")]
+    ProjectList { v: u8, request_id: RequestId },
+    #[serde(rename = "project.add", rename_all = "camelCase")]
+    ProjectAdd {
+        v: u8,
+        request_id: RequestId,
+        path: String,
+    },
+    #[serde(rename = "project.remove", rename_all = "camelCase")]
+    ProjectRemove {
+        v: u8,
+        request_id: RequestId,
+        project_id: ProjectId,
+    },
+    #[serde(rename = "session.list", rename_all = "camelCase")]
+    SessionList { v: u8, request_id: RequestId },
     #[serde(rename = "session.create", rename_all = "camelCase")]
     SessionCreate {
         v: u8,
         request_id: RequestId,
-        cwd: String,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        project_id: Option<ProjectId>,
+        #[serde(skip_serializing_if = "Option::is_none")]
+        cwd: Option<String>,
     },
     #[serde(rename = "session.load", rename_all = "camelCase")]
     SessionLoad {
+        v: u8,
+        request_id: RequestId,
+        session_id: SessionId,
+    },
+    #[serde(rename = "session.remove", rename_all = "camelCase")]
+    SessionRemove {
         v: u8,
         request_id: RequestId,
         session_id: SessionId,
@@ -138,6 +164,7 @@ mod tests {
     #[test]
     fn generated_domain_ids_are_uuid_v4() {
         assert_eq!(RequestId::new().0.get_version_num(), 4);
+        assert_eq!(ProjectId::new().0.get_version_num(), 4);
         assert_eq!(SessionId::new().0.get_version_num(), 4);
         assert_eq!(TurnId::new().0.get_version_num(), 4);
         assert_eq!(ToolExecutionId::new().0.get_version_num(), 4);

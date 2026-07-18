@@ -9,6 +9,7 @@ export type NyanPaths = {
   configFile: string;
   stateFile: string;
   modelCacheFile: string;
+  projectsFile: string;
   sessionsDir: string;
 };
 
@@ -27,6 +28,7 @@ export function resolveNyanPaths(env: Environment = process.env, home = homedir(
     configFile: join(configDir, "config.toml"),
     stateFile: join(stateDir, "state.json"),
     modelCacheFile: join(cacheDir, "models.json"),
+    projectsFile: join(dataDir, "projects.json"),
     sessionsDir: join(dataDir, "sessions"),
   };
 }

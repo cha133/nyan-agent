@@ -1,6 +1,6 @@
 import type { ModelMessage } from "ai";
-import type { SessionId, TurnId } from "@nyan/protocol";
-import { mkdir, open, readFile, readdir, truncate } from "node:fs/promises";
+import type { ProjectId, SessionId, TurnId } from "@nyan/protocol";
+import { mkdir, open, readFile, readdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
 import { atomicWriteJson, isNotFound, readJsonFile } from "./files";
 import type { NyanPaths } from "./paths";
@@ -10,6 +10,7 @@ export type SessionStatus = "idle" | "running" | "completed" | "failed" | "cance
 export type SessionMeta = {
   version: 1;
   id: SessionId;
+  projectId?: ProjectId;
   cwd: string;
   title: string;
   model: string;
@@ -50,12 +51,13 @@ export class SessionStore {
     }
   }
 
-  async create(cwd: string, model: string): Promise<SessionMeta> {
+  async create(cwd: string, model: string, projectId?: ProjectId): Promise<SessionMeta> {
     const id = crypto.randomUUID() as SessionId;
     const createdAt = this.now().toISOString();
     const meta: SessionMeta = {
       version: 1,
       id,
+      ...(projectId ? { projectId } : {}),
       cwd,
       title: "New session",
       model,
@@ -71,6 +73,24 @@ export class SessionStore {
 
   async load(id: SessionId): Promise<SessionMeta | undefined> {
     return readJsonFile<SessionMeta>(this.metaFile(id));
+  }
+
+  async list(): Promise<SessionMeta[]> {
+    await mkdir(this.paths.sessionsDir, { recursive: true });
+    const sessions = await Promise.all((await readdir(this.paths.sessionsDir, { withFileTypes: true }))
+      .filter((entry) => entry.isDirectory())
+      .map((entry) => this.load(entry.name as SessionId).catch(() => undefined)));
+    return sessions.filter((session): session is SessionMeta => session !== undefined)
+      .sort((left, right) => right.updatedAt.localeCompare(left.updatedAt));
+  }
+
+  async remove(id: SessionId): Promise<boolean> {
+    if (!await this.load(id)) return false;
+    await this.mutate(id, async () => {
+      await rm(this.sessionDir(id), { recursive: true });
+      this.nextSeq.delete(id);
+    });
+    return true;
   }
 
   async update(id: SessionId, patch: Partial<Omit<SessionMeta, "version" | "id" | "createdAt">>): Promise<SessionMeta> {
