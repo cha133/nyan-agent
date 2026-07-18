@@ -11,6 +11,7 @@
 - [x] 写出第一版技术方案，等待关键细节对齐。
 - [x] 对齐 provider/model 配置、JSONL 会话存储、非流式 Markdown、侧栏折叠、subagent 展示和 Bun 缺失体验。
 - [x] 用户审批 MVP 产品约束与技术方案，可以进入实现阶段。
+- [x] 确认 nyan 内部领域 ID 统一使用无前缀的原始 UUIDv4；类型由字段名和 branded/newtype 保证，内部 tool execution ID 不进入模型上下文。
 
 ## 下一步：阶段 1 — workspace 骨架
 
