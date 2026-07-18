@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 2 垂直切片已完成；React 可通过 Tauri Channel 接收 Rust supervisor 转发的 Bun echo backend 协议事件。
+- 当前状态：阶段 3 已完成；桌面端已接通可配置 provider 的真实无工具模型回合、停止、标题生成、JSONL 会话持久化与中断恢复。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 

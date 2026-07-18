@@ -14,6 +14,7 @@
 - [x] 确认 nyan 内部领域 ID 统一使用无前缀的原始 UUIDv4；类型由字段名和 branded/newtype 保证，内部 tool execution ID 不进入模型上下文。
 - [x] 完成阶段 1 workspace 骨架：桌面、agent、protocol 三个包边界落地，根级命令可统一检查、测试、构建和启动。
 - [x] 完成阶段 2 协议与进程垂直切片：共享协议、双端 NDJSON codec、Bun echo backend、Rust supervisor 和 Tauri Channel 已贯通。
+- [x] 完成阶段 3 配置、provider 与最小 turn：真实 AI SDK 回合、停止、标题和 JSONL 恢复已接入桌面端。
 
 ## 已完成：阶段 1 — workspace 骨架
 
@@ -53,11 +54,28 @@
 - `bun run check`、`bun run test`、`bun run build` 与 `git diff --check` 通过。
 - `bun run dev` 已确认 Vite、Tauri desktop executable 和 Bun backend 可共同启动；停止后没有遗留 Bun 进程。
 
-## 下一步：阶段 3 — 配置、provider 与最小 turn
+## 已完成：阶段 3 — 配置、provider 与最小 turn
 
-- 定义 config、XDG 路径覆盖、模型 cache/state，并建立隔离真实用户目录的测试。
-- 集成 Anthropic-compatible、OpenAI-compatible provider 与模型发现。
-- 用 AI SDK `ToolLoopAgent` 替换 echo turn，加入停止、标题生成和最小 JSONL transcript。
+- [x] 实现 Windows 默认与 XDG 父目录覆盖路径；TOML 配置只读，模型 cache 与最近模型 state 分离写入。
+- [x] 集成 Anthropic-compatible、OpenAI-compatible provider；支持静态模型、动态发现、TTL cache、稳定去重和过期后台刷新。
+- [x] 用 AI SDK v7 `ToolLoopAgent` 实现无工具主回合；实时转发文本/reasoning delta，在完整 block 边界落盘。
+- [x] 实现全局单活动 turn、幂等停止、同主模型并行生成短标题及本地截断回退。
+- [x] 实现 session metadata 原子更新、JSONL 单调 seq、规范化 model messages、展示 transcript、半行截断与运行中 turn 恢复为 interrupted。
+- [x] Rust supervisor 复用活动 session，并暴露 submit/cancel 命令；React 页面可显示模型输出、停止回合和错误。
+
+### 阶段 3 验证记录
+
+- Bun/TypeScript：protocol 7 项、agent 14 项测试通过；覆盖 provider factory、凭据错误脱敏、模型发现/cache、完整 block、停止竞态、单活动 turn、并发 JSONL 写入和异常恢复。
+- Rust：supervisor、NDJSON、协议与真实 Bun 生命周期共 7 项测试通过。
+- `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check` 与 `git diff --check` 通过。
+- `bun run dev` 已确认 Vite、Tauri desktop executable 和 Bun backend 正常启动；停止后没有遗留 nyan-agent/Bun 进程。
+- 未使用真实凭据发起外部模型请求；provider 请求由 mock 覆盖，真实请求需用户配置 `~/.config/nyan/config.toml` 后手动验收。
+
+## 下一步：阶段 4 — 产品外壳
+
+- 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型选择。
+- 实现侧栏导航、Lexical 纯文本输入、静态 Markdown transcript block。
+- 验证 Win11 Mica、原生标题栏、窗口尺寸与深浅色。
 
 ## 后续实施队列
 
@@ -70,10 +88,10 @@
 
 ### 阶段 3 — 配置、provider 与最小 turn
 
-- [ ] 定义 `~/.config/nyan/config.toml` schema、XDG/测试路径覆盖和模型 cache/state 格式。
-- [ ] 集成 Anthropic-compatible、OpenAI-compatible provider 与动态模型发现。
-- [ ] 实现无工具主 agent turn、完整文本 block、停止和主模型标题生成。
-- [ ] 实现最小 JSONL transcript 与异常中断恢复。
+- [x] 定义 `~/.config/nyan/config.toml` schema、XDG/测试路径覆盖和模型 cache/state 格式。
+- [x] 集成 Anthropic-compatible、OpenAI-compatible provider 与动态模型发现。
+- [x] 实现无工具主 agent turn、完整文本 block、停止和主模型标题生成。
+- [x] 实现最小 JSONL transcript 与异常中断恢复。
 
 ### 阶段 4 — 产品外壳
 
@@ -96,8 +114,9 @@
 
 ## 最近一轮没有做
 
-- 没有接入 provider、真实模型调用、agent loop 或 JSONL 持久化。
-- 没有实现正式项目/任务外壳；当前页面只用于验证阶段 2 的 backend 状态和 echo 事件流。
+- 没有实现正式项目/任务 CRUD、侧栏与多任务导航；这些进入阶段 4。
+- 没有接入 Lexical/Markdown 正式 transcript 组件；当前页面显示完整文本与底层事件活动。
+- 没有实现模型选择 UI；阶段 3 后端按最近模型、默认模型、首个可用模型依次选择。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 

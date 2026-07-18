@@ -14,13 +14,21 @@ function App() {
   const [status, setStatus] = useState<BackendStatus>({ state: "starting" });
   const [events, setEvents] = useState<ServerMessage[]>([]);
   const [prompt, setPrompt] = useState("你好，nyan");
+  const [answer, setAnswer] = useState("");
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  const [activeTurn, setActiveTurn] = useState<{ sessionId: string; turnId: string }>();
 
   useEffect(() => {
     const channel = new Channel<ServerMessage>();
     channel.onmessage = (message) => {
       setEvents((current) => [...current.slice(-19), message]);
+      if (message.type === "assistant.text.delta") setAnswer((current) => current + message.text);
+      if (message.type === "turn.completed" || message.type === "turn.cancelled" || message.type === "turn.failed") {
+        setSubmitting(false);
+        setActiveTurn(undefined);
+      }
+      if (message.type === "turn.failed") setError(message.error.message);
       if (message.type === "backend.crashed") {
         setStatus({ state: "crashed", exitCode: message.exitCode, message: message.message });
       }
@@ -48,17 +56,27 @@ function App() {
     }
   }
 
-  async function submitEcho() {
+  async function submitPrompt() {
     const text = prompt.trim();
     if (!text || submitting) return;
     setSubmitting(true);
     setError("");
+    setAnswer("");
     try {
-      await invoke("echo_prompt", { prompt: text });
+      const response = await invoke<{ result: { sessionId: string; turnId: string } }>("submit_prompt", { prompt: text });
+      setActiveTurn(response.result);
     } catch (reason) {
       setError(String(reason));
-    } finally {
       setSubmitting(false);
+    }
+  }
+
+  async function stopTurn() {
+    if (!activeTurn) return;
+    try {
+      await invoke("cancel_turn", { sessionId: activeTurn.sessionId, turnId: activeTurn.turnId });
+    } catch (reason) {
+      setError(String(reason));
     }
   }
 
@@ -112,7 +130,7 @@ function App() {
     <main className="app-shell">
       <header>
         <div>
-          <p className="eyebrow">Protocol vertical slice</p>
+          <p className="eyebrow">Stage 3 · Model turn</p>
           <h1>nyan-agent</h1>
         </div>
         <div className="runtime-badge">
@@ -120,25 +138,26 @@ function App() {
         </div>
       </header>
 
-      <section className="echo-panel">
-        <label htmlFor="echo-prompt">Echo prompt</label>
+      <section className="prompt-panel">
+        <label htmlFor="agent-prompt">Ask nyan</label>
         <div className="prompt-row">
-          <textarea id="echo-prompt" value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} />
-          <button onClick={submitEcho} disabled={submitting || !prompt.trim()}>
-            {submitting ? "Sending…" : "Send"}
-          </button>
+          <textarea id="agent-prompt" value={prompt} onChange={(event) => setPrompt(event.currentTarget.value)} disabled={submitting} />
+          {submitting
+            ? <button className="stop-button" onClick={stopTurn} disabled={!activeTurn}>Stop</button>
+            : <button onClick={submitPrompt} disabled={!prompt.trim()}>Send</button>}
         </div>
         {error && <p className="error-text">{error}</p>}
+        {answer && <div className="answer-card"><p>{answer}</p></div>}
         <p className="hint" title={status.bunPath}>Runtime: {status.bunPath}</p>
       </section>
 
       <section className="events-panel">
         <div className="section-heading">
-          <h2>Ordered Channel events</h2>
+          <h2>Turn activity</h2>
           <span>{turnEvents.length} turn events</span>
         </div>
         {events.length === 0 ? (
-          <p className="empty-state">Send an echo prompt to verify the Rust ↔ Bun ↔ React path.</p>
+          <p className="empty-state">Send a prompt to start the first persisted model turn.</p>
         ) : (
           <ol>
             {events.map((event, index) => (

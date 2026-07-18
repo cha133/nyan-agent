@@ -28,8 +28,20 @@ async fn backend_restart(manager: State<'_, BackendManager>) -> Result<BackendSt
 }
 
 #[tauri::command]
-async fn echo_prompt(manager: State<'_, BackendManager>, prompt: String) -> Result<Value, String> {
-    manager.echo_prompt(prompt).await
+async fn submit_prompt(
+    manager: State<'_, BackendManager>,
+    prompt: String,
+) -> Result<Value, String> {
+    manager.submit_prompt(prompt).await
+}
+
+#[tauri::command]
+async fn cancel_turn(
+    manager: State<'_, BackendManager>,
+    session_id: String,
+    turn_id: String,
+) -> Result<Value, String> {
+    manager.cancel_turn(session_id, turn_id).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -47,7 +59,8 @@ pub fn run() {
             backend_status,
             backend_subscribe,
             backend_restart,
-            echo_prompt
+            submit_prompt,
+            cancel_turn
         ])
         .build(tauri::generate_context!())
         .expect("error while building tauri application");

@@ -34,11 +34,14 @@ header { display: flex; align-items: center; justify-content: space-between; gap
 header h1 { margin: 3px 0 0; font-size: 30px; }
 .runtime-badge { border: 1px solid #343744; border-radius: 999px; background: #1b1d25; padding: 8px 12px; color: #cfd1db; font-size: 13px; }
 .status-dot { display: inline-block; width: 8px; height: 8px; margin-right: 7px; border-radius: 50%; background: #62d58b; box-shadow: 0 0 12px #62d58b88; }
-.echo-panel, .events-panel { border: 1px solid #30323d; border-radius: 16px; background: #191b22; padding: 20px; }
-.echo-panel label { display: block; margin-bottom: 10px; font-weight: 650; }
+.prompt-panel, .events-panel { border: 1px solid #30323d; border-radius: 16px; background: #191b22; padding: 20px; }
+.prompt-panel label { display: block; margin-bottom: 10px; font-weight: 650; }
 .prompt-row { display: flex; align-items: stretch; gap: 10px; }
 .prompt-row textarea { min-height: 84px; flex: 1; resize: vertical; border: 1px solid #3a3d49; border-radius: 11px; outline: none; background: #111218; color: inherit; padding: 12px; }
 .prompt-row textarea:focus { border-color: #7477ff; box-shadow: 0 0 0 3px #7477ff22; }
+.stop-button { border-color: #8e4751; background: #783c45; }
+.answer-card { margin-top: 16px; border: 1px solid #343744; border-radius: 12px; background: #111218; padding: 14px 16px; white-space: pre-wrap; }
+.answer-card p { margin: 0; line-height: 1.6; }
 .events-panel { margin-top: 16px; }
 .section-heading { display: flex; align-items: baseline; justify-content: space-between; gap: 16px; }
 .section-heading h2 { margin: 0; font-size: 18px; }

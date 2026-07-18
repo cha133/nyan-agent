@@ -56,6 +56,7 @@ struct BackendInner {
     lifecycle: Mutex<()>,
     generation: AtomicU64,
     exit_notify: Notify,
+    active_session: Mutex<Option<String>>,
 }
 
 #[derive(Clone)]
@@ -76,6 +77,7 @@ impl BackendManager {
                 lifecycle: Mutex::new(()),
                 generation: AtomicU64::new(0),
                 exit_notify: Notify::new(),
+                active_session: Mutex::new(None),
             }),
             agent_entry,
         }
@@ -225,38 +227,67 @@ impl BackendManager {
         self.start().await
     }
 
-    pub async fn echo_prompt(&self, prompt: String) -> Result<Value, String> {
+    pub async fn submit_prompt(&self, prompt: String) -> Result<Value, String> {
         if !matches!(self.status().await, BackendStatus::Ready { .. }) {
             return Err("Bun backend is not ready.".to_owned());
         }
-        let create_request_id = RequestId::new();
-        let created = self
+        let session_id = if let Some(session_id) = self.inner.active_session.lock().await.clone() {
+            session_id
+        } else {
+            let create_request_id = RequestId::new();
+            let created = self
+                .request(
+                    json!({
+                        "v": PROTOCOL_VERSION,
+                        "type": "session.create",
+                        "requestId": create_request_id,
+                        "cwd": std::env::current_dir().map_err(|error| error.to_string())?
+                    }),
+                    create_request_id,
+                )
+                .await?;
+            ensure_ok(&created)?;
+            let session_id = created
+                .pointer("/result/sessionId")
+                .and_then(Value::as_str)
+                .ok_or_else(|| "The backend did not return a session ID.".to_owned())?
+                .to_owned();
+            *self.inner.active_session.lock().await = Some(session_id.clone());
+            session_id
+        };
+        let prompt_request_id = RequestId::new();
+        let response = self
             .request(
                 json!({
                     "v": PROTOCOL_VERSION,
-                    "type": "session.create",
-                    "requestId": create_request_id,
-                    "cwd": std::env::current_dir().map_err(|error| error.to_string())?
+                    "type": "prompt.submit",
+                    "requestId": prompt_request_id,
+                    "sessionId": session_id,
+                    "prompt": prompt
                 }),
-                create_request_id,
+                prompt_request_id,
             )
             .await?;
-        let session_id = created
-            .pointer("/result/sessionId")
-            .and_then(Value::as_str)
-            .ok_or_else(|| "Echo backend did not return a session ID.".to_owned())?;
-        let prompt_request_id = RequestId::new();
-        self.request(
-            json!({
-                "v": PROTOCOL_VERSION,
-                "type": "prompt.submit",
-                "requestId": prompt_request_id,
-                "sessionId": session_id,
-                "prompt": prompt
-            }),
-            prompt_request_id,
-        )
-        .await
+        ensure_ok(&response)?;
+        Ok(response)
+    }
+
+    pub async fn cancel_turn(&self, session_id: String, turn_id: String) -> Result<Value, String> {
+        let request_id = RequestId::new();
+        let response = self
+            .request(
+                json!({
+                    "v": PROTOCOL_VERSION,
+                    "type": "turn.cancel",
+                    "requestId": request_id,
+                    "sessionId": session_id,
+                    "turnId": turn_id
+                }),
+                request_id,
+            )
+            .await?;
+        ensure_ok(&response)?;
+        Ok(response)
     }
 
     pub async fn shutdown(&self) {
@@ -433,58 +464,15 @@ pub fn development_agent_entry() -> PathBuf {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use std::sync::Mutex as StdMutex;
-    use tauri::ipc::InvokeResponseBody;
 
     #[tokio::test]
-    async fn bun_echo_backend_completes_an_ordered_channel_turn() {
+    async fn bun_backend_initializes_and_stops_cleanly() {
         let manager = BackendManager::new(development_agent_entry());
         manager.start().await.unwrap();
         assert!(matches!(
             manager.status().await,
             BackendStatus::Ready { .. }
         ));
-
-        let received = Arc::new(StdMutex::new(Vec::<Value>::new()));
-        let callback_events = received.clone();
-        manager
-            .subscribe(Channel::new(move |body| {
-                if let InvokeResponseBody::Json(json) = body {
-                    callback_events
-                        .lock()
-                        .unwrap()
-                        .push(serde_json::from_str(&json).unwrap());
-                }
-                Ok(())
-            }))
-            .await;
-
-        let response = manager.echo_prompt("猫".to_owned()).await.unwrap();
-        assert_eq!(response["ok"], true);
-
-        timeout(Duration::from_secs(2), async {
-            loop {
-                if received
-                    .lock()
-                    .unwrap()
-                    .iter()
-                    .any(|event| event["type"] == "turn.completed")
-                {
-                    break;
-                }
-                tokio::time::sleep(Duration::from_millis(10)).await;
-            }
-        })
-        .await
-        .unwrap();
-
-        let events = received.lock().unwrap();
-        let sequence: Vec<u64> = events
-            .iter()
-            .filter_map(|event| event["seq"].as_u64())
-            .collect();
-        assert_eq!(sequence, vec![0, 1, 2, 3]);
-        drop(events);
 
         manager.shutdown().await;
         assert!(matches!(manager.status().await, BackendStatus::Stopped));
@@ -517,4 +505,15 @@ mod tests {
         .unwrap();
         assert!(manager.inner.writer.lock().await.is_none());
     }
+}
+
+fn ensure_ok(response: &Value) -> Result<(), String> {
+    if response["ok"] == true {
+        return Ok(());
+    }
+    Err(response
+        .pointer("/error/message")
+        .and_then(Value::as_str)
+        .unwrap_or("The backend rejected the request.")
+        .to_owned())
 }

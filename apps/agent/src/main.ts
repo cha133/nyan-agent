@@ -1,17 +1,25 @@
 import { createNdjsonWriter, NdjsonDecoder, parseClientMessage, type ProtocolError } from "@nyan/protocol";
-import { EchoBackend } from "./backend";
+import type { ServerMessage } from "@nyan/protocol";
+import { AgentBackend } from "./backend";
 
 export async function run(): Promise<void> {
   const decoder = new NdjsonDecoder(parseClientMessage);
-  const write = createNdjsonWriter(process.stdout);
-  const backend = new EchoBackend();
+  const rawWrite = createNdjsonWriter(process.stdout);
+  let writeQueue = Promise.resolve();
+  const write = (message: ServerMessage) => writeQueue = writeQueue.then(() => rawWrite(message));
+  const backend = new AgentBackend({ emit: write });
 
   try {
     for await (const chunk of Bun.stdin.stream()) {
       for (const message of decoder.push(chunk)) {
-        const result = backend.handle(message);
+        const result = await backend.handle(message);
         for (const response of result.messages) await write(response);
-        if (result.shouldExit) return;
+        result.start?.();
+        if (result.shouldExit) {
+          await result.beforeExit?.();
+          await writeQueue;
+          return;
+        }
       }
     }
     decoder.finish();

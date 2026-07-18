@@ -1,61 +1,202 @@
-import type { ClientMessage, ServerMessage, SessionId, TurnId } from "@nyan/protocol";
+import type { LanguageModel, ModelMessage } from "ai";
+import type { ClientMessage, ProtocolError, ServerMessage, SessionId, TurnEvent, TurnId } from "@nyan/protocol";
+import { AgentRunner, fallbackTitle, type RunResult, type RunnerEvent } from "./agent-runner";
+import { type NyanConfig, ConfigError, loadConfig } from "./config";
+import { ModelCatalog } from "./models";
+import { type NyanPaths, resolveNyanPaths } from "./paths";
+import { ProviderRegistry } from "./providers";
+import { SessionStore } from "./sessions";
 
 type HandleResult = {
   messages: ServerMessage[];
+  start?: () => void;
+  beforeExit?: () => Promise<void>;
   shouldExit?: boolean;
 };
 
-export class EchoBackend {
-  private readonly sessions = new Map<SessionId, { cwd: string }>();
+type Runner = {
+  run(options: { cwd: string; messages: ModelMessage[]; abortSignal: AbortSignal; onEvent: (event: RunnerEvent) => void | Promise<void> }): Promise<RunResult>;
+  title(prompt: string): Promise<string>;
+};
 
-  handle(message: ClientMessage): HandleResult {
+type BackendOptions = {
+  paths?: NyanPaths;
+  config?: NyanConfig;
+  runnerFactory?: (model: LanguageModel) => Runner;
+  emit?: (message: ServerMessage) => void | Promise<void>;
+};
+
+type ActiveTurn = { sessionId: SessionId; turnId: TurnId; controller: AbortController; done: Promise<void> };
+type TurnEventPayload = TurnEvent extends infer Event ? Event extends TurnEvent ? Omit<Event, "v" | "sessionId" | "turnId" | "seq"> : never : never;
+
+export class AgentBackend {
+  private readonly paths: NyanPaths;
+  private readonly store: SessionStore;
+  private readonly runnerFactory: (model: LanguageModel) => Runner;
+  private readonly emit: (message: ServerMessage) => void | Promise<void>;
+  private config?: NyanConfig;
+  private registry?: ProviderRegistry;
+  private catalog?: ModelCatalog;
+  private booted = false;
+  private configError?: ProtocolError;
+  private active?: ActiveTurn;
+
+  constructor(options: BackendOptions = {}) {
+    this.paths = options.paths ?? resolveNyanPaths();
+    this.store = new SessionStore(this.paths);
+    this.config = options.config;
+    this.runnerFactory = options.runnerFactory ?? ((model) => new AgentRunner(model));
+    this.emit = options.emit ?? (() => {});
+  }
+
+  async handle(message: ClientMessage): Promise<HandleResult> {
+    await this.boot();
     switch (message.type) {
       case "initialize":
+        return { messages: [{ v: 1, type: "initialized", requestId: message.requestId, backend: { name: "nyan-agent", version: "0.1.0", bunVersion: Bun.version } }] };
+      case "shutdown": {
+        this.active?.controller.abort();
         return {
-          messages: [{
-            v: 1,
-            type: "initialized",
-            requestId: message.requestId,
-            backend: { name: "nyan-agent", version: "0.1.0", bunVersion: Bun.version },
-          }],
-        };
-      case "shutdown":
-        return {
-          messages: [{ v: 1, type: "response", requestId: message.requestId, ok: true, result: { status: "shutting_down" } }],
+          messages: [ok(message.requestId, { status: "shutting_down" })],
           shouldExit: true,
+          beforeExit: async () => { await this.active?.done; },
         };
+      }
       case "session.create": {
-        const sessionId = crypto.randomUUID() as SessionId;
-        this.sessions.set(sessionId, { cwd: message.cwd });
-        return {
-          messages: [{ v: 1, type: "response", requestId: message.requestId, ok: true, result: { sessionId, cwd: message.cwd } }],
-        };
+        if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
+        try {
+          const model = await this.catalog!.selectedModel();
+          const session = await this.store.create(message.cwd, model);
+          await this.catalog!.rememberModel(model);
+          return { messages: [ok(message.requestId, { ...session, sessionId: session.id })] };
+        } catch (error) {
+          return { messages: [failed(message.requestId, publicError(error))] };
+        }
       }
       case "session.load": {
-        const session = this.sessions.get(message.sessionId);
-        return session
-          ? { messages: [{ v: 1, type: "response", requestId: message.requestId, ok: true, result: { sessionId: message.sessionId, ...session } }] }
-          : { messages: [{ v: 1, type: "response", requestId: message.requestId, ok: false, error: { code: "session_not_found", message: "Session was not found" } }] };
+        const session = await this.store.load(message.sessionId);
+        return { messages: [session ? ok(message.requestId, session) : failed(message.requestId, notFound())] };
       }
-      case "prompt.submit": {
-        if (!this.sessions.has(message.sessionId)) {
-          return { messages: [{ v: 1, type: "response", requestId: message.requestId, ok: false, error: { code: "session_not_found", message: "Session was not found" } }] };
+      case "prompt.submit":
+        return this.submit(message);
+      case "turn.cancel": {
+        if (!this.active || this.active.sessionId !== message.sessionId || this.active.turnId !== message.turnId) {
+          return { messages: [ok(message.requestId, { status: "already_completed", turnId: message.turnId })] };
         }
-        const turnId = crypto.randomUUID() as TurnId;
-        return {
-          messages: [
-            { v: 1, type: "response", requestId: message.requestId, ok: true, result: { accepted: true, turnId } },
-            { v: 1, type: "turn.started", sessionId: message.sessionId, turnId, seq: 0 },
-            { v: 1, type: "assistant.text.delta", sessionId: message.sessionId, turnId, seq: 1, text: message.prompt },
-            { v: 1, type: "assistant.block.completed", sessionId: message.sessionId, turnId, seq: 2, text: message.prompt },
-            { v: 1, type: "turn.completed", sessionId: message.sessionId, turnId, seq: 3 },
-          ],
-        };
+        this.active.controller.abort();
+        return { messages: [ok(message.requestId, { status: "cancelling", turnId: message.turnId })] };
       }
-      case "turn.cancel":
-        return {
-          messages: [{ v: 1, type: "response", requestId: message.requestId, ok: true, result: { status: "already_completed", turnId: message.turnId } }],
-        };
     }
   }
+
+  private async submit(message: Extract<ClientMessage, { type: "prompt.submit" }>): Promise<HandleResult> {
+    if (this.configError) return { messages: [failed(message.requestId, this.configError)] };
+    if (this.active) return { messages: [failed(message.requestId, { code: "turn_in_progress", message: "Another turn is already running" })] };
+    const session = await this.store.load(message.sessionId);
+    if (!session) return { messages: [failed(message.requestId, notFound())] };
+    if (!message.prompt.trim()) return { messages: [failed(message.requestId, { code: "prompt_empty", message: "Prompt cannot be empty" })] };
+
+    const turnId = crypto.randomUUID() as TurnId;
+    const controller = new AbortController();
+    await this.store.append(session.id, "user.message", { itemId: crypto.randomUUID(), text: message.prompt }, turnId);
+    await this.store.append(session.id, "model.messages", [{ role: "user", content: message.prompt } satisfies ModelMessage], turnId);
+    await this.store.update(session.id, { status: "running", activeTurnId: turnId });
+
+    const active: ActiveTurn = { sessionId: session.id, turnId, controller, done: Promise.resolve() };
+    this.active = active;
+    return {
+      messages: [ok(message.requestId, { accepted: true, sessionId: session.id, turnId })],
+      start: () => { active.done = this.execute(session.id, turnId, controller, message.prompt); },
+    };
+  }
+
+  private async execute(sessionId: SessionId, turnId: TurnId, controller: AbortController, prompt: string): Promise<void> {
+    let seq = 0;
+    const send = async (event: TurnEventPayload) => {
+      await this.emit({ v: 1, sessionId, turnId, seq: seq++, ...event } as TurnEvent);
+    };
+    try {
+      const session = await this.store.load(sessionId);
+      if (!session) throw new Error("session_not_found");
+      const runner = this.runnerFactory(this.registry!.model(session.model));
+      const messages = await this.store.messages(sessionId);
+      await this.store.append(sessionId, "turn.started", {}, turnId);
+      await send({ type: "turn.started" });
+
+      if (session.title === "New session") {
+        void runner.title(prompt)
+          .catch(() => fallbackTitle(prompt))
+          .then((title) => this.store.setTitle(sessionId, title))
+          .catch(() => {});
+      }
+
+      const result = await runner.run({
+        cwd: session.cwd,
+        messages,
+        abortSignal: controller.signal,
+        onEvent: async (event) => {
+          if (event.type === "text.delta") await send({ type: "assistant.text.delta", text: event.text });
+          else if (event.type === "text.completed") {
+            await this.store.append(sessionId, "assistant.block", { itemId: crypto.randomUUID(), text: event.text }, turnId);
+            await send({ type: "assistant.block.completed", text: event.text });
+          } else if (event.type === "reasoning.delta") {
+            await send({ type: "reasoning.delta", text: event.text });
+          } else {
+            await this.store.append(sessionId, "assistant.reasoning", { itemId: crypto.randomUUID(), text: event.text }, turnId);
+          }
+        },
+      });
+
+      if (result.status === "cancelled") {
+        await this.store.append(sessionId, "turn.cancelled", {}, turnId);
+        await this.store.update(sessionId, { status: "cancelled", activeTurnId: undefined });
+        await send({ type: "turn.cancelled" });
+      } else {
+        await this.store.append(sessionId, "model.messages", result.responseMessages, turnId);
+        await this.store.append(sessionId, "turn.completed", {}, turnId);
+        await this.store.update(sessionId, { status: "completed", activeTurnId: undefined });
+        await send({ type: "turn.completed" });
+      }
+    } catch (error) {
+      const detail = publicError(error);
+      const cancelled = controller.signal.aborted;
+      await this.store.append(sessionId, cancelled ? "turn.cancelled" : "turn.failed", cancelled ? {} : detail, turnId).catch(() => {});
+      await this.store.update(sessionId, { status: cancelled ? "cancelled" : "failed", activeTurnId: undefined }).catch(() => {});
+      await send(cancelled ? { type: "turn.cancelled" } : { type: "turn.failed", error: detail });
+    } finally {
+      if (this.active?.turnId === turnId) this.active = undefined;
+    }
+  }
+
+  private async boot(): Promise<void> {
+    if (this.booted) return;
+    await this.store.recover();
+    try {
+      this.config ??= await loadConfig(this.paths);
+      this.registry = new ProviderRegistry(this.config);
+      this.catalog = new ModelCatalog(this.config, this.paths);
+    } catch (error) {
+      this.configError = publicError(error);
+    }
+    this.booted = true;
+  }
+}
+
+function ok(requestId: Extract<ClientMessage, { requestId: unknown }>["requestId"], result: unknown): ServerMessage {
+  return { v: 1, type: "response", requestId, ok: true, result };
+}
+
+function failed(requestId: Extract<ClientMessage, { requestId: unknown }>["requestId"], error: ProtocolError): ServerMessage {
+  return { v: 1, type: "response", requestId, ok: false, error };
+}
+
+function notFound(): ProtocolError { return { code: "session_not_found", message: "Session was not found" }; }
+
+function publicError(error: unknown): ProtocolError {
+  if (error instanceof ConfigError) return { code: error.code, message: error.message };
+  const message = error instanceof Error ? error.message : "Unknown error";
+  const [candidate] = message.split(":", 1);
+  const known = new Set(["config_missing", "config_invalid", "model_not_configured", "model_discovery_failed", "provider_not_found", "invalid_model_key", "session_not_found"]);
+  const code = known.has(candidate) ? candidate : "model_request_failed";
+  return { code, message: code === "model_request_failed" ? "The model request failed" : message };
 }
