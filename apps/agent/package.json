@@ -8,9 +8,10 @@
     "start": "bun src/main.ts",
     "build": "bun build src/main.ts --target=bun --outdir=dist",
     "typecheck": "tsc --noEmit",
-    "test": "bun test --pass-with-no-tests"
+    "test": "bun test"
   },
   "dependencies": {
+    "@nyan/protocol": "workspace:*",
     "ai": "^7.0.31"
   },
   "devDependencies": {

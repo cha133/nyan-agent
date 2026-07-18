@@ -9,6 +9,7 @@
       "name": "@nyan/agent",
       "version": "0.1.0",
       "dependencies": {
+        "@nyan/protocol": "workspace:*",
         "ai": "^7.0.31",
       },
       "devDependencies": {
@@ -23,6 +24,7 @@
         "@heroui/react": "^3.2.2",
         "@heroui/styles": "^3.2.2",
         "@lexical/react": "^0.48.0",
+        "@nyan/protocol": "workspace:*",
         "@tailwindcss/vite": "^4.3.3",
         "@tauri-apps/api": "^2",
         "@tauri-apps/plugin-opener": "^2",
@@ -45,6 +47,7 @@
       "name": "@nyan/protocol",
       "version": "0.1.0",
       "devDependencies": {
+        "@types/bun": "latest",
         "typescript": "~5.8.3",
       },
     },

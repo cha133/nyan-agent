@@ -13,6 +13,7 @@
 - [x] 用户审批 MVP 产品约束与技术方案，可以进入实现阶段。
 - [x] 确认 nyan 内部领域 ID 统一使用无前缀的原始 UUIDv4；类型由字段名和 branded/newtype 保证，内部 tool execution ID 不进入模型上下文。
 - [x] 完成阶段 1 workspace 骨架：桌面、agent、protocol 三个包边界落地，根级命令可统一检查、测试、构建和启动。
+- [x] 完成阶段 2 协议与进程垂直切片：共享协议、双端 NDJSON codec、Bun echo backend、Rust supervisor 和 Tauri Channel 已贯通。
 
 ## 已完成：阶段 1 — workspace 骨架
 
@@ -34,20 +35,38 @@
 - `bun run dev` 已确认 Vite 在 `http://localhost:1420/` 就绪，Tauri desktop executable 成功启动。
 - 目录移动后清理了含旧绝对路径的 Rust `target` 缓存并从空缓存重建；未改动业务源码行为。
 
-## 下一步：阶段 2 — 协议与进程垂直切片
+## 已完成：阶段 2 — 协议与进程垂直切片
 
-- 定义第一批共享 envelope、命令、响应、事件及 TS/Rust golden fixtures。
-- 先实现并测试 NDJSON codec，再接 Rust supervisor、Bun echo backend 与 Tauri Channel。
-- 补齐 Bun 缺失错误页和进程退出清理。
+- [x] 定义 v1 envelope、生命周期、session/prompt/cancel 命令、统一 response、turn/tool/subagent 事件及 branded UUIDv4 ID。
+- [x] 建立 TS/Rust 共用 golden fixtures，并在两端验证序列化/反序列化。
+- [x] 实现 TS/Rust NDJSON codec，覆盖半帧、多帧、CRLF/空行、UTF-8 跨 chunk、16 MiB 上限与 EOF 半包。
+- [x] 实现 Bun echo backend；stdout 只输出协议帧，stderr 保留日志通道。
+- [x] 实现 Windows Bun PATH/版本检测、无窗口启动、stdin/stdout/stderr 管理、初始化握手和请求关联。
+- [x] 通过 Tauri Channel 向 React 转发有序事件；最小 echo 页面可显示 `seq 0–3` 的完整 turn。
+- [x] 实现 Bun 缺失专用错误页、重新检测/重启、异常退出状态和应用退出时的 shutdown/强制清理回退。
+
+### 阶段 2 验证记录
+
+- TypeScript：protocol 7 项测试、Bun echo backend 2 项测试通过。
+- Rust：golden fixtures、UUIDv4、NDJSON、真实 Bun handshake/Channel echo、异常退出共 7 项测试通过。
+- 集成测试实际启动全局 Bun，验证 `initialize → initialized`、session/create、prompt/turn 事件顺序和 shutdown。
+- `bun run check`、`bun run test`、`bun run build` 与 `git diff --check` 通过。
+- `bun run dev` 已确认 Vite、Tauri desktop executable 和 Bun backend 可共同启动；停止后没有遗留 Bun 进程。
+
+## 下一步：阶段 3 — 配置、provider 与最小 turn
+
+- 定义 config、XDG 路径覆盖、模型 cache/state，并建立隔离真实用户目录的测试。
+- 集成 Anthropic-compatible、OpenAI-compatible provider 与模型发现。
+- 用 AI SDK `ToolLoopAgent` 替换 echo turn，加入停止、标题生成和最小 JSONL transcript。
 
 ## 后续实施队列
 
 ### 阶段 2 — 协议与进程垂直切片
 
-- [ ] 定义共享 envelope、命令/响应/事件和 TS/Rust golden fixtures。
-- [ ] 实现 NDJSON codec，覆盖半帧、多帧、UTF-8 跨 chunk、16 MiB 超限与 EOF 半包。
-- [ ] 实现 Rust supervisor 与 Bun echo backend，通过 Tauri Channel 打通有序事件流。
-- [ ] 实现 Bun 缺失错误页、重新检测和进程退出清理。
+- [x] 定义共享 envelope、命令/响应/事件和 TS/Rust golden fixtures。
+- [x] 实现 NDJSON codec，覆盖半帧、多帧、UTF-8 跨 chunk、16 MiB 超限与 EOF 半包。
+- [x] 实现 Rust supervisor 与 Bun echo backend，通过 Tauri Channel 打通有序事件流。
+- [x] 实现 Bun 缺失错误页、重新检测和进程退出清理。
 
 ### 阶段 3 — 配置、provider 与最小 turn
 
@@ -77,8 +96,9 @@
 
 ## 最近一轮没有做
 
-- 没有实现 NDJSON、supervisor、provider、agent loop 或产品 UI。
-- 没有改动现有模板 UI、Tauri 配置或 Rust 业务代码。
+- 没有接入 provider、真实模型调用、agent loop 或 JSONL 持久化。
+- 没有实现正式项目/任务外壳；当前页面只用于验证阶段 2 的 backend 状态和 echo 事件流。
+- 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 
 ## 完成定义

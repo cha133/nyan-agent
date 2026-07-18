@@ -1,0 +1,28 @@
+{
+  "clientMessages": [
+    { "v": 1, "type": "initialize", "requestId": "00000000-0000-4000-8000-000000000001", "client": { "name": "nyan-desktop", "version": "0.1.0" } },
+    { "v": 1, "type": "session.create", "requestId": "00000000-0000-4000-8000-000000000002", "cwd": "C:\\Dev\\nyan-agent" },
+    { "v": 1, "type": "session.load", "requestId": "00000000-0000-4000-8000-000000000003", "sessionId": "10000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "prompt.submit", "requestId": "00000000-0000-4000-8000-000000000004", "sessionId": "10000000-0000-4000-8000-000000000001", "prompt": "你好，nyan" },
+    { "v": 1, "type": "turn.cancel", "requestId": "00000000-0000-4000-8000-000000000005", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001" },
+    { "v": 1, "type": "shutdown", "requestId": "00000000-0000-4000-8000-000000000006" }
+  ],
+  "serverMessages": [
+    { "v": 1, "type": "initialized", "requestId": "00000000-0000-4000-8000-000000000001", "backend": { "name": "nyan-agent", "version": "0.1.0", "bunVersion": "1.3.14" } },
+    { "v": 1, "type": "response", "requestId": "00000000-0000-4000-8000-000000000002", "ok": true, "result": { "sessionId": "10000000-0000-4000-8000-000000000001" } },
+    { "v": 1, "type": "response", "requestId": "00000000-0000-4000-8000-000000000003", "ok": false, "error": { "code": "session_not_found", "message": "Session was not found" } },
+    { "v": 1, "type": "backend.error", "error": { "code": "invalid_message", "message": "Message was rejected" } },
+    { "v": 1, "type": "backend.crashed", "exitCode": 1, "message": "Backend exited unexpectedly" },
+    { "v": 1, "type": "turn.started", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 0 },
+    { "v": 1, "type": "assistant.text.delta", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 1, "text": "你好" },
+    { "v": 1, "type": "assistant.block.completed", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 2, "text": "你好" },
+    { "v": 1, "type": "reasoning.delta", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 3, "text": "思考中" },
+    { "v": 1, "type": "tool.started", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 4, "toolExecutionId": "30000000-0000-4000-8000-000000000001", "toolName": "shell", "input": {} },
+    { "v": 1, "type": "tool.output", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 5, "toolExecutionId": "30000000-0000-4000-8000-000000000001", "preview": "ok" },
+    { "v": 1, "type": "tool.completed", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 6, "toolExecutionId": "30000000-0000-4000-8000-000000000001", "output": { "exitCode": 0 } },
+    { "v": 1, "type": "subagent.activity", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 7, "subagentId": "40000000-0000-4000-8000-000000000001", "kind": "tool", "preview": "reading" },
+    { "v": 1, "type": "turn.completed", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 8 },
+    { "v": 1, "type": "turn.failed", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 9, "error": { "code": "provider_error", "message": "Provider failed" } },
+    { "v": 1, "type": "turn.cancelled", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 10 }
+  ]
+}
