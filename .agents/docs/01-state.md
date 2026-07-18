@@ -119,6 +119,7 @@
 - 没有实现正式项目/任务 CRUD、侧栏与多任务导航；这些进入阶段 4。
 - 没有接入 Lexical/Markdown 正式 transcript 组件；当前页面显示完整文本与底层事件活动。
 - 没有实现模型选择 UI；阶段 3 后端按最近模型、默认模型、首个可用模型依次选择。
+- 没有接入 WebdriverIO Tauri E2E；先用 `dev:inspect` + CDP 形成现场调试闭环，待阶段 4 UI 结构稳定后再固化自动化用例。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 

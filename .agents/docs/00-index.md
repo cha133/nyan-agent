@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 3 已完成；桌面端已接通可配置 provider 的真实无工具模型回合、停止、标题生成、JSONL 会话持久化与中断恢复。
+- 当前状态：阶段 3 已完成；桌面端已接通可配置 provider 的真实无工具模型回合、停止、标题生成、JSONL 会话持久化与中断恢复，并具备可供 agent 连接的 WebView2/CDP 开发模式。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 
@@ -29,6 +29,13 @@
 | 已放弃的 TUI 原型 | `C:\Dev\nyan-agent-tui` | 仅用于理解旧需求和测试面；不可抄代码 |
 
 优先读取当前工程 `node_modules` 中与安装版本完全匹配的 AI SDK/HeroUI 文档；本地源码仓库用于补充追踪实现。
+
+## 开发与调试
+
+- `bun run dev`：普通 Tauri 开发模式。
+- `bun run dev:inspect`：仅在本次开发子进程启用 `--remote-debugging-port=0`；agent 可通过 `DevToolsActivePort` 连接当前 Tauri WebView2，读取 DOM、无障碍树、截图、console、浏览器日志和未处理异常。
+- 本机 `chrome-cdp` 技能位于 `C:\Users\Admin\.agents\skills\chrome-cdp`；已增加 `console`、`errors`、`console-watch`、`console-clear`。它不属于本仓库，重新安装技能可能覆盖本地增强。
+- WebdriverIO Tauri Service 尚未接入；计划在阶段 4 UI 结构稳定后，用于固化 renderer 与真实桌面 E2E，而不是替代现场 CDP 调试。
 
 ## 用户提供的参考材料
 
@@ -47,3 +54,5 @@
 - [Tauri 2 窗口定制](https://v2.tauri.app/learn/window-customization/)
 - [AI SDK 文档](https://ai-sdk.dev/docs)
 - [HeroUI v3 文档](https://heroui.com/docs/react/getting-started/installation)
+- [Tauri 2 WebDriver 测试](https://v2.tauri.app/develop/tests/webdriver/)
+- [Microsoft：让 agent 通过 CDP 检查 WebView2](https://learn.microsoft.com/en-us/microsoft-edge/web-platform/devtools-mcp-server)
