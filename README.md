@@ -1,7 +1,21 @@
-# Tauri + React + Typescript
+# nyan-agent
 
-This template should help get you started developing with Tauri, React and Typescript in Vite.
+Windows-first desktop coding agent built with Tauri, React, Bun, and the AI SDK.
 
-## Recommended IDE Setup
+## Workspace
 
-- [VS Code](https://code.visualstudio.com/) + [Tauri](https://marketplace.visualstudio.com/items?itemName=tauri-apps.tauri-vscode) + [rust-analyzer](https://marketplace.visualstudio.com/items?itemName=rust-lang.rust-analyzer)
+- `apps/desktop`: Tauri 2 + React/Vite desktop application
+- `apps/agent`: Bun agent backend
+- `packages/protocol`: shared desktop/backend protocol package
+
+## Commands
+
+```powershell
+bun install
+bun run dev
+bun run check
+bun run test
+bun run build
+```
+
+Run commands from the repository root. `bun run dev` starts the Tauri desktop application.

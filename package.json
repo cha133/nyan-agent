@@ -2,33 +2,18 @@
   "name": "nyan-agent",
   "private": true,
   "version": "0.1.0",
-  "type": "module",
+  "workspaces": [
+    "apps/*",
+    "packages/*"
+  ],
   "scripts": {
-    "dev": "vite",
-    "build": "tsc && vite build",
-    "preview": "vite preview",
-    "tauri": "tauri"
-  },
-  "dependencies": {
-    "@heroui/react": "^3.2.2",
-    "@heroui/styles": "^3.2.2",
-    "@lexical/react": "^0.48.0",
-    "@tailwindcss/vite": "^4.3.3",
-    "@tauri-apps/api": "^2",
-    "@tauri-apps/plugin-opener": "^2",
-    "ai": "^7.0.31",
-    "lexical": "^0.48.0",
-    "lucide-react": "^1.25.0",
-    "react": "^19.1.0",
-    "react-dom": "^19.1.0",
-    "tailwindcss": "^4.3.3"
-  },
-  "devDependencies": {
-    "@types/react": "^19.1.8",
-    "@types/react-dom": "^19.1.6",
-    "@vitejs/plugin-react": "^4.6.0",
-    "typescript": "~5.8.3",
-    "vite": "^7.0.4",
-    "@tauri-apps/cli": "^2"
+    "dev": "bun run build:protocol && bun run --cwd apps/desktop tauri dev",
+    "check": "bun run --filter '*' typecheck && cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "test": "bun run --filter '*' test && cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
+    "build": "bun run build:protocol && bun run build:agent && bun run build:desktop",
+    "build:protocol": "bun run --cwd packages/protocol build",
+    "build:agent": "bun run --cwd apps/agent build",
+    "build:desktop": "bun run --cwd apps/desktop build",
+    "tauri": "bun run --cwd apps/desktop tauri"
   }
 }

@@ -1,0 +1,15 @@
+{
+  "name": "@nyan/protocol",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "exports": "./dist/index.js",
+  "scripts": {
+    "build": "bun build src/index.ts --target=bun --outdir=dist",
+    "typecheck": "tsc --noEmit",
+    "test": "bun test --pass-with-no-tests"
+  },
+  "devDependencies": {
+    "typescript": "~5.8.3"
+  }
+}

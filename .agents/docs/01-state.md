@@ -12,19 +12,33 @@
 - [x] 对齐 provider/model 配置、JSONL 会话存储、非流式 Markdown、侧栏折叠、subagent 展示和 Bun 缺失体验。
 - [x] 用户审批 MVP 产品约束与技术方案，可以进入实现阶段。
 - [x] 确认 nyan 内部领域 ID 统一使用无前缀的原始 UUIDv4；类型由字段名和 branded/newtype 保证，内部 tool execution ID 不进入模型上下文。
+- [x] 完成阶段 1 workspace 骨架：桌面、agent、protocol 三个包边界落地，根级命令可统一检查、测试、构建和启动。
 
-## 下一步：阶段 1 — workspace 骨架
+## 已完成：阶段 1 — workspace 骨架
 
-- [ ] 记录迁移前 `bun run build` 与 `cargo check` 基线。
-- [ ] 将 React/Vite/Tauri 模板移动到 `apps/desktop`，保留 `src-tauri` 与桌面 app 共置。
-- [ ] 新建 `apps/agent`，只提供可运行的 Bun 占位入口，不实现 agent 业务。
-- [ ] 新建 `packages/protocol`，只提供包边界和占位导出，不提前设计完整协议。
-- [ ] 把根 `package.json` 改为 private workspace 聚合入口，依赖归属到对应 workspace。
-- [ ] 修正 Tauri/Vite 路径和根脚本，重新生成一致的 `bun.lock`。
-- [ ] 验证根级 install、typecheck、frontend build、`cargo check` 和 Tauri dev 启动。
-- [ ] 更新本文并提交阶段 1；不要在同一提交混入 NDJSON、provider 或 UI 业务。
+- [x] 记录迁移前 `bun run build` 与 `cargo check` 基线，两者均通过。
+- [x] 将 React/Vite/Tauri 模板移动到 `apps/desktop`，保留 `src-tauri` 与桌面 app 共置。
+- [x] 新建 `apps/agent`，只提供可运行的 Bun 占位入口，不实现 agent 业务。
+- [x] 新建 `packages/protocol`，只提供包边界和占位导出，不提前设计完整协议。
+- [x] 把根 `package.json` 改为 private workspace 聚合入口，依赖归属到对应 workspace。
+- [x] 修正根脚本并重新生成一致的 `bun.lock`；迁移后的 Tauri/Vite 相对路径无需额外改动。
+- [x] 验证根级 install、typecheck、build、test、`cargo check` 和 Tauri dev 启动。
+- [x] 更新本文；本轮未混入 NDJSON、provider 或 UI 业务。
 
 阶段 1 完成定义：仓库目录与技术方案一致；三个 workspace 均可被 Bun 识别；现有模板 UI 行为不变；根目录有单一入口完成检查和构建；工作区无意外生成物。
+
+### 阶段 1 验证记录
+
+- 迁移前：`bun run build`、`cargo check --manifest-path src-tauri/Cargo.toml` 通过。
+- 迁移后：`bun install`、`bun run check`、`bun run test`、`bun run build` 通过。
+- `bun run dev` 已确认 Vite 在 `http://localhost:1420/` 就绪，Tauri desktop executable 成功启动。
+- 目录移动后清理了含旧绝对路径的 Rust `target` 缓存并从空缓存重建；未改动业务源码行为。
+
+## 下一步：阶段 2 — 协议与进程垂直切片
+
+- 定义第一批共享 envelope、命令、响应、事件及 TS/Rust golden fixtures。
+- 先实现并测试 NDJSON codec，再接 Rust supervisor、Bun echo backend 与 Tauri Channel。
+- 补齐 Bun 缺失错误页和进程退出清理。
 
 ## 后续实施队列
 
@@ -61,10 +75,10 @@
 - [ ] 验证 agent artifact 打包、全新机器 Bun 检测及 Win11 安装包。
 - [ ] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
 
-## 本轮没有做
+## 最近一轮没有做
 
-- 没有移动目录或改造 workspace。
-- 没有改业务代码、依赖版本、Tauri 配置或 Rust 配置。
+- 没有实现 NDJSON、supervisor、provider、agent loop 或产品 UI。
+- 没有改动现有模板 UI、Tauri 配置或 Rust 业务代码。
 - 没有从参考仓库复制实现。
 
 ## 完成定义
