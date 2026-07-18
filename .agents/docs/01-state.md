@@ -15,6 +15,7 @@
 - [x] 完成阶段 1 workspace 骨架：桌面、agent、protocol 三个包边界落地，根级命令可统一检查、测试、构建和启动。
 - [x] 完成阶段 2 协议与进程垂直切片：共享协议、双端 NDJSON codec、Bun echo backend、Rust supervisor 和 Tauri Channel 已贯通。
 - [x] 完成阶段 3 配置、provider 与最小 turn：真实 AI SDK 回合、停止、标题和 JSONL 恢复已接入桌面端。
+- [x] 建立 Tauri WebView2 可观察开发入口：`dev:inspect` 仅在子进程环境启用随机 CDP 端口，可供 agent 读取 DOM、截图、console 与异常。
 
 ## 已完成：阶段 1 — workspace 骨架
 
@@ -69,6 +70,7 @@
 - Rust：supervisor、NDJSON、协议与真实 Bun 生命周期共 7 项测试通过。
 - `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check` 与 `git diff --check` 通过。
 - `bun run dev` 已确认 Vite、Tauri desktop executable 和 Bun backend 正常启动；停止后没有遗留 nyan-agent/Bun 进程。
+- `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
 - 未使用真实凭据发起外部模型请求；provider 请求由 mock 覆盖，真实请求需用户配置 `~/.config/nyan/config.toml` 后手动验收。
 
 ## 下一步：阶段 4 — 产品外壳

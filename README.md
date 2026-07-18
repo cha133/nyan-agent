@@ -13,12 +13,15 @@ Windows-first desktop coding agent built with Tauri, React, Bun, and the AI SDK.
 ```powershell
 bun install
 bun run dev
+bun run dev:inspect
 bun run check
 bun run test
 bun run build
 ```
 
 Run commands from the repository root. `bun run dev` starts the Tauri desktop application.
+
+Use `bun run dev:inspect` when an agent needs to inspect the live Tauri WebView2 page. It starts the same development app with a process-local random CDP port; regular development and production builds do not expose the debugging endpoint. After reproducing an issue, keep the window open and ask the agent to connect specifically to Tauri.
 
 ## Model configuration
 

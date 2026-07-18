@@ -8,6 +8,7 @@
   ],
   "scripts": {
     "dev": "bun run build:protocol && bun run --cwd apps/desktop tauri dev",
+    "dev:inspect": "bun run scripts/dev-inspect.ts",
     "check": "bun run --filter '*' typecheck && cargo check --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "test": "bun run --filter '*' test && cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "build": "bun run build:protocol && bun run build:agent && bun run build:desktop",
