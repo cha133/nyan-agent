@@ -1,11 +1,38 @@
-# Mica 失焦色调调研
+# Mica 失焦色调与壳层方案
 
-产品侧栏/标题栏使用 Tauri `Effect::Mica`（DWM system backdrop）。  
-**当前产品决策：接受失焦回退中性色**（系统默认），不把「失焦锁壁纸色调」当必须项。
+## 产品现状
 
-本文记录为对齐 Codex 失焦锁色所做的踩坑结论，避免重复投入。
+侧栏/标题栏使用 Tauri `Effect::Mica`（DWM system backdrop）。
+**当前接受失焦回退中性色**（系统默认），不以「失焦锁壁纸色调」为必须项。
 
-## 结论摘要
+## 已放弃：自绘壁纸假 Mica
+
+曾在主仓试过：Rust/`SPI_GETDESKWALLPAPER` 取桌面壁纸 → WebView 铺背景 → CSS blur / 降饱和 / 主题洗逼近 Mica。
+
+结论：**放弃**。
+
+1. **拖动卡顿**：按窗口屏幕坐标对齐时，即使改为 `transform` + `rAF` + 客户区原点，拖动仍明显卡；改为静态 `cover` 不跟坐标后卡顿消失，但已不再是真正的位置相关 Mica。
+2. **Blur 观感差**：CSS 强模糊 + 洗色很难贴近 Codex/系统 Mica（易洗成死灰，或颜色脏、层次假）；继续拧参数收益低。
+3. 代码已回退；不再在 Tauri 壳上迭代假 Mica。
+
+## 较长线、有希望但改造大的方向
+
+公开 Win32/DWM/`window-vibrancy` 路径无法在 Tauri HWND 上复现 Codex 失焦锁色；唯一真材质锁色样例是 **WinUI 3 `MicaController` + `AddSystemBackdropTarget`**（见下表 PoC）。
+
+因此更有希望的壳层迁移是：
+
+> **放弃当前 Windows 壳的 Tauri 2 + Rust**，改为 **WinUI 3 + WebView2 + C#**。
+> **暂时不做 macOS**（产品本就只承诺 Win11）；若以后要 Mac：可用单独 Tauri 2 壳或 macOS 原生壳，**复用同一套前端产物与 Bun 后端**，增量不大。
+
+要点：
+
+- Windows 壳换 WinUI3，才能正经接 `MicaController` / system backdrop，并对齐失焦行为。
+- React/Vite 前端与 `apps/agent` Bun 后端尽量不动；C# 只做窗口、WebView2 托管、与现有 NDJSON/进程监督对等的胶水。
+- 改造面主要在 `apps/desktop/src-tauri` → WinUI 工程，以及打包/启动路径；属于大改，**尚未开工**。
+
+## 历史：失焦锁色调研
+
+曾尝试对齐 Codex 的「失焦仍保留壁纸色调」：
 
 | 路径 | 激活壁纸色调 | 失焦锁色 | 备注 |
 | --- | --- | --- | --- |
@@ -17,7 +44,7 @@
 唯一真材质锁色路径是 **WinUI `AddSystemBackdropTarget`**，不适合直接接到 Tauri HWND。  
 公开 Win32/DWM/WASDK 路径无法复现 Codex 失焦锁色。
 
-## Codex 对照（GUI 未开源）
+### Codex 对照（GUI 未开源）
 
 开源树 `C:\Dev\codex` 只有后端/TUI 等，**没有**桌面壳（见根 [`AGENTS.md`](../AGENTS.md)）。
 
@@ -30,21 +57,16 @@
 并排验收：Codex 失焦仍锁色；同 attribute 的最小 DWM PoC 失焦仍褪色。  
 差量应在 Owl/Chromium native 绘制，不在公开 DWM API 或 asar 里的 focus 切换逻辑。
 
-## 已排除的做法
+### 已排除的做法
 
 - 再拧 `IsInputActive` / `MicaKind` / `Effect::Tabbed`（Mica Alt）
 - `CreateDesktopWindowTarget(..., isTopmost=true)`（盖住子控件）
 - 把曾试验的增强 DLL 接回 nyan 运行时
 - 固定 CSS 粉色/紫色 tint 冒充 Codex
 - 假定「Codex = WinUI `IsInputActive`」或「Codex 实现在开源 `C:\Dev\codex`」
+- **自绘壁纸假 Mica**（见上文；拖动卡顿 + blur 观感差）
 
-## 曾考虑、未做的替代
-
-**壁纸采样假 Mica**：读取桌面壁纸，按窗口位置裁切并 blur，作为侧栏背景。失焦可锁色，但与系统 Mica / Codex 非像素级一致。产品已选择接受系统失焦褪色，此方案搁置。
-
-**Owl native 逆向 / WinUI XAML islands**：成本高，当前不做。
-
-## 外部 PoC（不在本仓库）
+### 外部 PoC（不在本仓库）
 
 | 路径 | 内容 |
 | --- | --- |

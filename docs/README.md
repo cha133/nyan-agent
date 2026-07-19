@@ -6,7 +6,7 @@
 | --- | --- |
 | [product.md](product.md) | 产品范围、交互规则与非目标 |
 | [architecture.md](architecture.md) | 已实现的技术架构与关键决策 |
-| [mica.md](mica.md) | Mica 失焦色调踩坑调研（产品接受系统褪色） |
+| [mica.md](mica.md) | Mica 失焦调研、假 Mica 放弃结论、WinUI3 壳迁移备忘 |
 | [AGENTS.md](../AGENTS.md) | agent 日常工程约束（仓库根） |
 
 若文档与开发者最新明确指令冲突，以最新指令为准，并同步修正文档。
