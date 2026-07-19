@@ -106,6 +106,7 @@ docs/                          长期产品与架构文档
 ## 开发观察与参考
 
 - Tauri/WebView2 调试使用本机 `chrome-cdp` 技能并始终传 `--browser tauri`；目标从 `DevToolsActivePort` 自动发现。优先使用 compact accessibility snapshot、截图、console-watch 和 errors。
+- 临时调试截图、CDP `shot` 输出等一次性产物默认写系统临时目录（Windows 上如 `$env:TEMP` / `%TEMP%`），不要放进仓库可跟踪路径。仅当必须用工作区相对路径时，才写到已 gitignore 的目录（例如 `.agents/tmp/`），且不得放进 `.agents/docs/` 或 `docs/`。
 - 页面重载紧邻出现的 `Couldn't find callback id` 是旧 Tauri callback 的调试副作用；稳定后先清 console，再复现并判断，不能把历史 warning 当运行时故障。
 - 本地参考仓库仅用于阅读比较，不能直接复制实现：`C:\Dev\codex`、`C:\Dev\ai`、`C:\Dev\heroui`、`C:\Dev\opencode`、`C:\Dev\nyan-agent-tui`。
 - 实现或调整产品/架构范围后，同步更新 [`docs/`](docs/) 与本文。小需求不建临时文档；仅当开发者明确说是复杂/大型需求时，才按 [`docs/README.md`](docs/README.md) 在 `.agents/docs/` 建立临时工作文档，并在完成后沉淀再删除。
