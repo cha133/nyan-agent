@@ -7,7 +7,7 @@ describe("protocol v1 golden fixtures", () => {
   test("all client and server fixtures parse", async () => {
     const fixtures = await Bun.file(fixturePath).json();
     expect(fixtures.clientMessages.map(parseClientMessage)).toHaveLength(15);
-    expect(fixtures.serverMessages.map(parseServerMessage)).toHaveLength(16);
+    expect(fixtures.serverMessages.map(parseServerMessage)).toHaveLength(17);
   });
 
   test("rejects mixed IDs and unsupported versions", () => {

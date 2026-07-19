@@ -28,6 +28,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .nested .nav-item { color: var(--ctp-subtext-1); font-size: 13px; }
 .icon-action { display: grid; flex: 0 0 auto; width: 27px; height: 27px; place-items: center; border: 0; border-radius: 7px; background: transparent; color: var(--ctp-overlay-1); cursor: pointer; }
 .icon-action:hover { background: var(--ctp-surface-0); color: var(--ctp-text); }
+.icon-action:disabled { visibility: hidden; cursor: default; }
 .danger-action { visibility: hidden; }
 .nav-row:hover .danger-action { visibility: visible; }
 .danger-action:hover { color: var(--ctp-red); }
@@ -72,6 +73,7 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .model-option small { color: var(--ctp-overlay-1); font-size: 11px; font-weight: 400; }
 .composer-spacer { flex: 1; }
 .error-text { margin: 8px 4px 0; color: var(--ctp-red); font-size: 12px; }
+.composer-state { margin: 8px 4px 0; color: var(--ctp-overlay-1); font-size: 12px; }
 
 .centered-shell { display: grid; min-height: 100vh; place-items: center; background: var(--ctp-mantle); padding: 32px; }
 .status-card { width: min(620px, 100%); border: 1px solid var(--line); border-radius: 18px; background: var(--ctp-base); padding: 28px; box-shadow: 0 24px 80px color-mix(in srgb, var(--ctp-text) 9%, transparent); }

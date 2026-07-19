@@ -145,7 +145,7 @@ type Envelope = {
 - command：`session.create`、`session.load`、`prompt.submit`、`turn.cancel`
 - response：统一 `response`，包含 `requestId`、`ok`、`result` 或结构化 `error`
 - product commands：`project.list`、`project.add`、`project.remove`、`project.context.set`、`model.list`、`session.list`、`session.create`、`session.load`、`session.model.set`、`session.remove`
-- events：`turn.started`、`assistant.text.delta`、`assistant.block.completed`、`reasoning.delta`、`tool.started`、`tool.output`、`tool.completed`、`subagent.activity`、`turn.completed`、`turn.failed`、`turn.cancelled`
+- events：`session.title.updated`、`turn.started`、`assistant.text.delta`、`assistant.block.completed`、`reasoning.delta`、`tool.started`、`tool.output`、`tool.completed`、`subagent.activity`、`turn.completed`、`turn.failed`、`turn.cancelled`
 
 ### ID 格式
 

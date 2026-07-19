@@ -142,6 +142,7 @@ impl ServerEnvelope {
                 | "response"
                 | "backend.error"
                 | "backend.crashed"
+                | "session.title.updated"
                 | "turn.started"
                 | "assistant.text.delta"
                 | "assistant.block.completed"

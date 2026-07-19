@@ -37,6 +37,7 @@ export type ServerMessage =
   | { v: 1; type: "response"; requestId: RequestId; ok: false; error: ProtocolError }
   | { v: 1; type: "backend.error"; error: ProtocolError }
   | { v: 1; type: "backend.crashed"; exitCode: number | null; message: string }
+  | { v: 1; type: "session.title.updated"; sessionId: SessionId; title: string }
   | TurnEvent;
 
 export type TurnEvent =
@@ -82,6 +83,7 @@ const serverTypes = new Set<ServerMessage["type"]>([
   "response",
   "backend.error",
   "backend.crashed",
+  "session.title.updated",
   "turn.started",
   "assistant.text.delta",
   "assistant.block.completed",
@@ -163,6 +165,9 @@ export function parseServerMessage(value: unknown): ServerMessage {
   } else if (message.type === "backend.crashed") {
     if (message.exitCode !== null && typeof message.exitCode !== "number") throw invalid("backend.crashed.exitCode must be a number or null");
     requireString(message, "message");
+  } else if (message.type === "session.title.updated") {
+    requireUuid(message, "sessionId");
+    requireString(message, "title");
   } else {
     requireUuid(message, "sessionId");
     requireUuid(message, "turnId");

@@ -49,10 +49,13 @@ describe("agent backend", () => {
     const submitted = await backend.handle({ v: 1, type: "prompt.submit", requestId: requestId(), sessionId, prompt: "猫" });
     submitted.start?.();
     await waitFor(() => events.some((event) => event.type === "turn.completed"));
+    await waitFor(() => events.some((event) => event.type === "session.title.updated"));
 
     expect(submitted.messages[0]).toMatchObject({ type: "response", ok: true, result: { accepted: true, sessionId } });
-    expect(events.map((event) => event.type)).toEqual(["turn.started", "assistant.text.delta", "assistant.block.completed", "turn.completed"]);
-    expect(events.map((event) => "seq" in event ? event.seq : null)).toEqual([0, 1, 2, 3]);
+    expect(events.find((event) => event.type === "session.title.updated")).toMatchObject({ sessionId, title: "Cat task" });
+    const turnEvents = events.filter((event) => "turnId" in event);
+    expect(turnEvents.map((event) => event.type)).toEqual(["turn.started", "assistant.text.delta", "assistant.block.completed", "turn.completed"]);
+    expect(turnEvents.map((event) => "seq" in event ? event.seq : null)).toEqual([0, 1, 2, 3]);
   });
 
   test("enforces one global active turn and supports cancellation", async () => {

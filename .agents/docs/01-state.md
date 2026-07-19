@@ -77,8 +77,7 @@
 
 ## 下一步：阶段 4 — 产品外壳
 
-- 按最新确认的 Codex 交互调整侧栏列表：初始显示 5 条，每次“展开显示”增加 10 条，全部显示后才切换为“折叠显示”；折叠任一父级时递归重置其所有后代展开状态。
-- 验证并修正任务切换、标题异步刷新、运行中只读状态和真实 provider 回合。
+- 使用真实 provider 配置手动验收完整回合；自动化已覆盖 provider mock，仓库不保存真实凭据。
 - 在现有真实桌面 E2E 基础上补充任务切换、停止和标题更新回归覆盖。
 - 收尾窗口细节与阶段 4 验收；Win11 Mica spike 已完成。
 
@@ -94,6 +93,8 @@
 - [x] 接入稳定桌面 E2E：WebdriverIO Tauri Service embedded provider、测试专用 Tauri 权限/前端构建、临时 XDG 数据隔离和首条产品外壳 smoke flow 已落地。
 - [x] 完成 Mica/window effects spike：保留 Windows 原生标题栏与系统三按钮，窗口启用透明 WebView 和 Mica，侧栏透出材质，主内容保持白色不透明层级。
 - [x] 将产品外壳与 HeroUI 语义主题统一为 Catppuccin Latte：Mauve 作为主强调色，Base/Mantle/Crust 构成页面层级，并映射完整状态色、焦点色与表单色。
+- [x] 将侧栏项目、无项目任务及各项目任务列表改为独立可见上限：初始 5 条、每次增加 10 条、全部显示后才提供折叠；折叠项目列表时递归重置所有项目任务列表。
+- [x] 修正运行中任务切换与刷新恢复：session metadata 恢复全局 active turn，其他任务只读查看且明确提示；标题生成完成后通过 `session.title.updated` 独立事件即时更新侧栏和标题栏，不阻塞主 turn。
 
 ### 阶段 4 当前验证记录
 
@@ -106,6 +107,8 @@
 - Win11 Mica spike 将平台调用集中在 `platform/windows.rs`；原生标题栏、1200×800 默认尺寸和 960×640 最小尺寸保持不变，透明仅用于侧栏材质，transcript/composer 所在主内容仍为不透明白色。
 - Mica 改动后重新通过 `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；窗口效果未破坏启动、WDIO command bridge 或项目上下文刷新恢复。
 - Catppuccin Latte 配色调整后通过 `bun run build:desktop` 与 `git diff --check`；desktop production bundle 继续只有既有的大 chunk 提示。
+- 侧栏增量展开新增 5 项桌面纯逻辑测试，覆盖 5 → 15 → 25 增量、末页截断、全部显示后折叠和父级递归重置；重新通过 `bun run check`、`bun run test`、`bun run build` 与 `git diff --check`，production bundle 仍只有既有的大 chunk 提示。
+- 标题/运行态修正新增协议 golden fixture、后端标题事件断言和 2 项桌面恢复测试；`bun run check`、protocol 7 项、agent 20 项、desktop 7 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e` 均通过，E2E 仍为 1 个 spec、1 个测试。
 
 ## 后续实施队列
 
@@ -127,7 +130,7 @@
 
 - [x] 实现项目/任务 CRUD、cwd 规则、新任务默认项目和最近模型。
 - [x] 实现侧栏各列表的独立可见状态、任务导航和运行中只读查看。
-- [ ] 将列表行为从“一次展开全部”调整为初始 5 条、每次增量展开 10 条，全部显示后才提供折叠；父级折叠时递归重置所有后代展开状态，确保重新展开父级时回到完全折叠的初始状态。
+- [x] 将列表行为从“一次展开全部”调整为初始 5 条、每次增量展开 10 条，全部显示后才提供折叠；父级折叠时递归重置所有后代展开状态，确保重新展开父级时回到完全折叠的初始状态。
 - [x] 实现 Lexical 纯文本输入、静态 Markdown block 和 transcript 基础组件。
 - [x] 验证 Win11 Mica、原生标题栏、窗口尺寸与白色主题。
 - [x] 用 WebdriverIO Tauri Service 固化真实桌面 smoke E2E，并隔离真实用户数据。

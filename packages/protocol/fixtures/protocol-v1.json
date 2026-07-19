@@ -22,6 +22,7 @@
     { "v": 1, "type": "response", "requestId": "00000000-0000-4000-8000-000000000003", "ok": false, "error": { "code": "session_not_found", "message": "Session was not found" } },
     { "v": 1, "type": "backend.error", "error": { "code": "invalid_message", "message": "Message was rejected" } },
     { "v": 1, "type": "backend.crashed", "exitCode": 1, "message": "Backend exited unexpectedly" },
+    { "v": 1, "type": "session.title.updated", "sessionId": "10000000-0000-4000-8000-000000000001", "title": "修复标题刷新" },
     { "v": 1, "type": "turn.started", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 0 },
     { "v": 1, "type": "assistant.text.delta", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 1, "text": "你好" },
     { "v": 1, "type": "assistant.block.completed", "sessionId": "10000000-0000-4000-8000-000000000001", "turnId": "20000000-0000-4000-8000-000000000001", "seq": 2, "text": "你好" },

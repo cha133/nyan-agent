@@ -7,6 +7,8 @@ import { Folder, FolderPlus, MessageSquare, Plus, Send, Square, Trash2 } from "l
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
+import { INITIAL_VISIBLE_ITEMS, nextVisibleLimit, resetVisibleLimits, visibleItems, visibleLimit } from "./listVisibility";
+import { activeTurnFromSessions } from "./sessionState";
 import "./App.css";
 
 type BackendStatus =
@@ -17,12 +19,10 @@ type BackendStatus =
   | { state: "stopped" };
 
 type Project = { id: string; name: string; path: string; createdAt: string; updatedAt: string };
-type Session = { id: string; projectId?: string; cwd: string; title: string; model: string; status: string; createdAt: string; updatedAt: string };
+type Session = { id: string; projectId?: string; cwd: string; title: string; model: string; status: string; createdAt: string; updatedAt: string; activeTurnId?: string };
 type AvailableModel = { key: string; providerId: string; modelId: string; source: "static" | "discovered"; stale: boolean; unavailable?: boolean };
 type TranscriptRecord = { seq: number; createdAt: string; turnId?: string; kind: string; payload: unknown };
 type TranscriptItem = { id: string; role: "user" | "assistant" | "status"; text: string };
-
-const FIRST_PAGE_SIZE = 5;
 
 function App() {
   const [status, setStatus] = useState<BackendStatus>({ state: "starting" });
@@ -41,16 +41,29 @@ function App() {
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [activeTurn, setActiveTurn] = useState<{ sessionId: string; turnId: string }>();
-  const [expanded, setExpanded] = useState<Record<string, boolean>>({});
+  const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
 
   useEffect(() => {
     const channel = new Channel<ServerMessage>();
     channel.onmessage = (message) => {
       if (message.type === "backend.crashed") {
+        setSubmitting(false);
+        setActiveTurn(undefined);
         setStatus({ state: "crashed", exitCode: message.exitCode, message: message.message });
         return;
       }
+      if (message.type === "session.title.updated") {
+        setSessions((current) => current.map((session) => session.id === message.sessionId ? { ...session, title: message.title } : session));
+        setSelectedSession((current) => current?.id === message.sessionId ? { ...current, title: message.title } : current);
+        return;
+      }
       if (!("sessionId" in message)) return;
+      if (message.type === "turn.started") {
+        setSubmitting(false);
+        setActiveTurn({ sessionId: message.sessionId, turnId: message.turnId });
+        setSessions((current) => current.map((session) => session.id === message.sessionId ? { ...session, status: "running", activeTurnId: message.turnId } : session));
+        setSelectedSession((current) => current?.id === message.sessionId ? { ...current, status: "running", activeTurnId: message.turnId } : current);
+      }
       if (message.type === "assistant.text.delta" && message.sessionId === selectedSessionRef.current) {
         setStreamingText((current) => current + message.text);
       }
@@ -59,8 +72,11 @@ function App() {
         setTranscript((current) => [...current, { id: `${message.turnId}-${message.seq}`, role: "assistant", text: message.text }]);
       }
       if (message.type === "turn.completed" || message.type === "turn.cancelled" || message.type === "turn.failed") {
+        const terminalStatus = message.type === "turn.completed" ? "completed" : message.type === "turn.cancelled" ? "cancelled" : "failed";
         setSubmitting(false);
-        setActiveTurn(undefined);
+        setActiveTurn((current) => current?.turnId === message.turnId ? undefined : current);
+        setSessions((current) => current.map((session) => session.id === message.sessionId ? { ...session, status: terminalStatus, activeTurnId: undefined } : session));
+        setSelectedSession((current) => current?.id === message.sessionId ? { ...current, status: terminalStatus, activeTurnId: undefined } : current);
         void refreshLists();
       }
       if (message.type === "turn.failed") setError(message.error.message);
@@ -89,7 +105,13 @@ function App() {
         projectContextHydrated.current = true;
       }
     }
-    if (sessionResult.status === "fulfilled") setSessions(sessionResult.value.sessions);
+    if (sessionResult.status === "fulfilled") {
+      const nextSessions = sessionResult.value.sessions;
+      setSessions(nextSessions);
+      setSelectedSession((current) => current ? nextSessions.find((session) => session.id === current.id) ?? current : current);
+      const restoredTurn = activeTurnFromSessions(nextSessions);
+      setActiveTurn((current) => restoredTurn ?? current);
+    }
     if (modelResult.status === "fulfilled") {
       setModels(modelResult.value.models);
       setDraftModelKey((current) => current && modelResult.value.models.some((model) => model.key === current) ? current : modelResult.value.selectedModel);
@@ -140,6 +162,7 @@ function App() {
   }
 
   async function removeProject(project: Project) {
+    if (submitting || activeTurn) return;
     if (!window.confirm(`从 nyan 中移除项目“${project.name}”？项目文件不会被删除。`)) return;
     try {
       await invoke("remove_project", { projectId: project.id });
@@ -166,6 +189,7 @@ function App() {
   }
 
   async function removeSession(session: Session) {
+    if (submitting || activeTurn) return;
     if (!window.confirm(`删除任务“${session.title}”？该任务记录将被永久删除。`)) return;
     try {
       await invoke("remove_session", { sessionId: session.id });
@@ -177,7 +201,7 @@ function App() {
   }
 
   async function changeModel(key: string) {
-    if (submitting || !key) return;
+    if (submitting || activeTurn || !key) return;
     setError("");
     if (!selectedSession) {
       setDraftModelKey(key);
@@ -195,7 +219,7 @@ function App() {
 
   async function submitPrompt() {
     const text = prompt.trim();
-    if (!text || submitting) return;
+    if (!text || submitting || activeTurn) return;
     setSubmitting(true);
     setError("");
     try {
@@ -211,6 +235,7 @@ function App() {
       setEditorKey((current) => current + 1);
       const response = await invoke<{ result: { sessionId: string; turnId: string } }>("submit_prompt", { sessionId: session.id, prompt: text });
       setActiveTurn(response.result);
+      setSubmitting(false);
       await refreshLists();
     } catch (reason) {
       setError(String(reason));
@@ -239,6 +264,9 @@ function App() {
   const displayModels = selectedSession && !models.some((model) => model.key === selectedSession.model)
     ? [{ key: selectedSession.model, providerId: "不可用", modelId: selectedSession.model, source: "static" as const, stale: false, unavailable: true }, ...models]
     : models;
+  const isBusy = submitting || Boolean(activeTurn);
+  const selectedIsActive = Boolean(selectedSession && activeTurn?.sessionId === selectedSession.id);
+  const viewingOtherWhileRunning = Boolean(activeTurn && !selectedIsActive);
 
   return (
     <main className="product-shell">
@@ -246,23 +274,23 @@ function App() {
         <div className="brand"><span className="brand-mark">N</span><strong>nyan-agent</strong></div>
         <Button fullWidth onPress={() => startDraft(draftProjectId)}><Plus size={17} />新建任务</Button>
 
-        <SidebarHeading label="项目" onAdd={addProject} />
+        <SidebarHeading label="项目" onAdd={addProject} isDisabled={isBusy} />
         <div className="nav-list">
-          {limited(projects, expanded.projects).map((project) => (
+          {visibleItems(projects, visibleLimit(visibleLimits, "projects")).map((project) => (
             <div className="project-group" key={project.id}>
               <div className="nav-row">
                 <button className="nav-item project-item" onClick={() => startDraft(project.id)} title={project.path}><Folder size={16} /><span>{project.name}</span></button>
                 <button className="icon-action" onClick={() => startDraft(project.id)} aria-label={`在 ${project.name} 新建任务`}><Plus size={14} /></button>
-                <button className="icon-action danger-action" onClick={() => removeProject(project)} aria-label={`移除 ${project.name}`}><Trash2 size={14} /></button>
+                <button className="icon-action danger-action" disabled={isBusy} onClick={() => removeProject(project)} aria-label={`移除 ${project.name}`}><Trash2 size={14} /></button>
               </div>
-              <SessionList sessions={sessions.filter((session) => session.projectId === project.id)} selectedId={selectedSession?.id} expanded={expanded[`project:${project.id}`]} onToggle={() => toggleExpanded(`project:${project.id}`)} onOpen={loadSession} onRemove={removeSession} />
+              <SessionList sessions={sessions.filter((session) => session.projectId === project.id)} selectedId={selectedSession?.id} visibleLimit={visibleLimit(visibleLimits, `project:${project.id}`)} isReadOnly={isBusy} onToggle={(total) => toggleList(`project:${project.id}`, total)} onOpen={loadSession} onRemove={removeSession} />
             </div>
           ))}
-          <ExpandButton total={projects.length} isExpanded={expanded.projects} onPress={() => toggleExpanded("projects")} />
+          <ExpandButton total={projects.length} visibleLimit={visibleLimit(visibleLimits, "projects")} onPress={() => toggleProjectList(projects.length)} />
         </div>
 
         <SidebarHeading label="任务" onAdd={() => startDraft()} />
-        <SessionList sessions={unboundSessions} selectedId={selectedSession?.id} expanded={expanded.tasks} onToggle={() => toggleExpanded("tasks")} onOpen={loadSession} onRemove={removeSession} />
+        <SessionList sessions={unboundSessions} selectedId={selectedSession?.id} visibleLimit={visibleLimit(visibleLimits, "tasks")} isReadOnly={isBusy} onToggle={(total) => toggleList("tasks", total)} onOpen={loadSession} onRemove={removeSession} />
         <div className="sidebar-runtime" title={status.bunPath}><span /> Bun {status.bunVersion}</div>
       </aside>
 
@@ -285,11 +313,11 @@ function App() {
 
         <footer className="composer-wrap">
           <div className="composer">
-            <PromptEditor key={editorKey} onChange={setPrompt} disabled={submitting} />
+            <PromptEditor key={editorKey} onChange={setPrompt} disabled={isBusy} />
             <div className="composer-toolbar">
               <div className="composer-field model-field">
                 <span className="composer-field-label">模型</span>
-                <Select className="model-select" aria-label="任务模型" placeholder="无可用模型" selectedKey={activeModelKey ?? null} disabledKeys={displayModels.filter((model) => model.unavailable).map((model) => model.key)} onSelectionChange={(key) => void changeModel(String(key))} isDisabled={submitting || models.length === 0}>
+                <Select className="model-select" aria-label="任务模型" placeholder="无可用模型" selectedKey={activeModelKey ?? null} disabledKeys={displayModels.filter((model) => model.unavailable).map((model) => model.key)} onSelectionChange={(key) => void changeModel(String(key))} isDisabled={isBusy || models.length === 0}>
                   <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
                   <Select.Popover><ListBox>
                     {displayModels.map((model) => <ListBox.Item id={model.key} key={model.key} textValue={`${model.providerId} ${model.modelId}`}>
@@ -305,7 +333,7 @@ function App() {
                   const projectId = key === "none" ? undefined : String(key);
                   setDraftProjectId(projectId);
                   void rememberProjectContext(projectId);
-                }} isDisabled={Boolean(selectedSession)}>
+                }} isDisabled={Boolean(selectedSession) || isBusy}>
                   <Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
                   <Select.Popover><ListBox>
                     <ListBox.Item id="none" textValue="无项目">无项目<ListBox.ItemIndicator /></ListBox.Item>
@@ -314,19 +342,33 @@ function App() {
                 </Select>
               </div>
               <div className="composer-spacer" />
-              {submitting
+              {selectedIsActive
                 ? <Button isIconOnly variant="danger" onPress={stopTurn} isDisabled={!activeTurn} aria-label="停止"><Square size={16} fill="currentColor" /></Button>
-                : <Button isIconOnly onPress={submitPrompt} isDisabled={!prompt.trim()} aria-label="发送"><Send size={17} /></Button>}
+                : <Button isIconOnly onPress={submitPrompt} isDisabled={isBusy || !prompt.trim()} aria-label="发送"><Send size={17} /></Button>}
             </div>
           </div>
+          {viewingOtherWhileRunning && <p className="composer-state">另一任务正在运行；当前任务仅供查看。</p>}
           {error && <p className="error-text">{error}</p>}
         </footer>
       </section>
     </main>
   );
 
-  function toggleExpanded(key: string) {
-    setExpanded((current) => ({ ...current, [key]: !current[key] }));
+  function toggleList(key: string, total: number) {
+    setVisibleLimits((current) => ({
+      ...current,
+      [key]: nextVisibleLimit(visibleLimit(current, key), total),
+    }));
+  }
+
+  function toggleProjectList(total: number) {
+    setVisibleLimits((current) => {
+      const currentLimit = visibleLimit(current, "projects");
+      const nextLimit = nextVisibleLimit(currentLimit, total);
+      if (nextLimit !== INITIAL_VISIBLE_ITEMS) return { ...current, projects: nextLimit };
+
+      return resetVisibleLimits(current, "projects", "project:");
+    });
   }
 }
 
@@ -344,26 +386,24 @@ function BackendScreen({ status, error, restart }: { status: BackendStatus; erro
   </section></main>;
 }
 
-function SidebarHeading({ label, onAdd }: { label: string; onAdd: () => void }) {
-  return <div className="sidebar-heading"><span>{label}</span><button className="icon-action" onClick={onAdd} aria-label={`添加${label}`}><FolderPlus size={15} /></button></div>;
+function SidebarHeading({ label, onAdd, isDisabled = false }: { label: string; onAdd: () => void; isDisabled?: boolean }) {
+  return <div className="sidebar-heading"><span>{label}</span><button className="icon-action" disabled={isDisabled} onClick={onAdd} aria-label={`添加${label}`}><FolderPlus size={15} /></button></div>;
 }
 
-function SessionList({ sessions, selectedId, expanded, onToggle, onOpen, onRemove }: { sessions: Session[]; selectedId?: string; expanded?: boolean; onToggle: () => void; onOpen: (session: Session) => void; onRemove: (session: Session) => void }) {
+function SessionList({ sessions, selectedId, visibleLimit: limit, isReadOnly, onToggle, onOpen, onRemove }: { sessions: Session[]; selectedId?: string; visibleLimit: number; isReadOnly: boolean; onToggle: (total: number) => void; onOpen: (session: Session) => void; onRemove: (session: Session) => void }) {
   return <div className="session-list">
-    {limited(sessions, expanded).map((session) => <div className={`nav-row nested ${selectedId === session.id ? "selected" : ""}`} key={session.id}>
+    {visibleItems(sessions, limit).map((session) => <div className={`nav-row nested ${selectedId === session.id ? "selected" : ""}`} key={session.id}>
       <button className="nav-item" onClick={() => onOpen(session)}><MessageSquare size={14} /><span>{session.title}</span></button>
-      <button className="icon-action danger-action" onClick={() => onRemove(session)} aria-label={`删除 ${session.title}`}><Trash2 size={13} /></button>
+      <button className="icon-action danger-action" disabled={isReadOnly} onClick={() => onRemove(session)} aria-label={`删除 ${session.title}`}><Trash2 size={13} /></button>
     </div>)}
-    <ExpandButton total={sessions.length} isExpanded={expanded} onPress={onToggle} />
+    <ExpandButton total={sessions.length} visibleLimit={limit} onPress={() => onToggle(sessions.length)} />
   </div>;
 }
 
-function ExpandButton({ total, isExpanded, onPress }: { total: number; isExpanded?: boolean; onPress: () => void }) {
-  if (total <= FIRST_PAGE_SIZE) return null;
-  return <button className="expand-button" onClick={onPress}>{isExpanded ? "折叠显示" : `展开显示（${total}）`}</button>;
+function ExpandButton({ total, visibleLimit: limit, onPress }: { total: number; visibleLimit: number; onPress: () => void }) {
+  if (total <= INITIAL_VISIBLE_ITEMS) return null;
+  return <button className="expand-button" onClick={onPress}>{limit >= total ? "折叠显示" : `展开显示（${total}）`}</button>;
 }
-
-function limited<T>(items: T[], expanded?: boolean): T[] { return expanded ? items : items.slice(0, FIRST_PAGE_SIZE); }
 
 function toTranscriptItems(records: TranscriptRecord[]): TranscriptItem[] {
   return records.flatMap((record): TranscriptItem[] => {

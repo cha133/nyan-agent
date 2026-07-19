@@ -204,7 +204,10 @@ export class AgentBackend {
       if (session.title === "New session") {
         void runner.title(prompt)
           .catch(() => fallbackTitle(prompt))
-          .then((title) => this.store.setTitle(sessionId, title))
+          .then(async (title) => {
+            await this.store.setTitle(sessionId, title);
+            await this.emit({ v: 1, type: "session.title.updated", sessionId, title });
+          })
           .catch(() => {});
       }
 
