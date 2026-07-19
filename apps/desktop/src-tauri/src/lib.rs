@@ -133,7 +133,12 @@ async fn cancel_turn(
 pub fn run() {
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
-        .plugin(tauri_plugin_dialog::init());
+        .plugin(tauri_plugin_dialog::init())
+        .plugin(
+            tauri_plugin_snap_layout::init()
+                .button_id("titlebar-maximize")
+                .build(),
+        );
     #[cfg(feature = "e2e")]
     let builder = builder
         .plugin(tauri_plugin_wdio::init())

@@ -7,6 +7,7 @@ import { Folder, FolderPlus, MessageSquare, Plus, Send, Square, Trash2 } from "l
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
+import { Titlebar } from "./Titlebar";
 import { failureStatusFromMessage, formatBackendError, type BackendStatus } from "./backendState";
 import { INITIAL_VISIBLE_ITEMS, nextVisibleLimit, resetVisibleLimits, visibleItems, visibleLimit } from "./listVisibility";
 import { activeTurnFromSessions } from "./sessionState";
@@ -272,7 +273,12 @@ function App() {
   }
 
   if (status.state === "unavailable" || status.state === "crashed" || status.state !== "ready") {
-    return <BackendScreen status={status} error={error} restart={restartBackend} />;
+    return (
+      <div className="app-frame">
+        <Titlebar />
+        <BackendScreen status={status} error={error} restart={restartBackend} />
+      </div>
+    );
   }
 
   const projectIds = new Set(projects.map((project) => project.id));
@@ -288,9 +294,10 @@ function App() {
   const viewingOtherWhileRunning = Boolean(activeTurn && !selectedIsActive);
 
   return (
+    <div className="app-frame">
+      <Titlebar />
     <main className="product-shell">
       <aside className="sidebar">
-        <div className="brand"><span className="brand-mark">N</span><strong>nyan-agent</strong></div>
         <Button fullWidth onPress={() => startDraft(draftProjectId)}><Plus size={17} />新建任务</Button>
 
         <SidebarHeading label="项目" onAdd={addProject} isDisabled={isBusy} />
@@ -371,6 +378,7 @@ function App() {
         </footer>
       </section>
     </main>
+    </div>
   );
 
   function toggleList(key: string, total: number) {
