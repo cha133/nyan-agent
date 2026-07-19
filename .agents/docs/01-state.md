@@ -77,7 +77,7 @@
 
 ## 进行中：阶段 6 — 稳定与发布
 
-- 已完成恢复与结构化故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及恢复、Bun 缺失→重新检测、crash、非法协议和配置错误真实桌面 E2E；下一步补充进程树清理桌面验收并进行真实 provider 综合验收。
+- 已完成恢复与结构化故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及恢复、Bun 缺失→重新检测、crash、非法协议、配置错误和后端进程树清理真实桌面 E2E；下一步进行真实 provider 综合验收。
 - 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 已完成：阶段 4 — 产品外壳
@@ -170,7 +170,7 @@
 - [x] 生成 Win11 x64 NSIS 安装包并完成仓库 target 下的隔离静默安装/运行/卸载 smoke；安装后的 release app 实际启动安装目录 artifact，关闭窗口后 Bun 子进程退出。
 - [x] 真实桌面 E2E 用隔离 PATH 启动为 Bun unavailable，断言专用错误页与结构化状态；运行中把当前 Bun 硬链接进测试 PATH 后点击“重新检测”，同一 app 恢复 ready。
 - [x] 将坏 JSONL 恢复、Bun 子进程崩溃、非法协议和配置错误扩展到真实桌面 E2E。
-- [ ] 补充进程树清理的真实桌面故障验收。
+- [x] 用 Windows Job Object 确保 Bun 后端异常退出或受控关闭时级联终止其后代，并补充真实桌面故障验收。
 - [ ] 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止。
 - [ ] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
 
@@ -183,13 +183,14 @@
 - NSIS `nyan-agent_0.1.0_x64-setup.exe` 为 2,644,393 bytes，SHA-256 `5E1EC52412739BF985C59B54E6C69CA4981D3208070029D440905E60810101FD`；隔离安装后观测到全局 Bun 以安装路径 artifact 为参数启动，关闭 app 后该子进程消失，uninstaller 返回 0，剩余空测试目录已清理。
 - E2E 新增第二次真实 app 启动：PATH 初始只有空测试 bin 与 System32，确认 unavailable；随后把当前 Bun 硬链接进同一 PATH 并点击重新检测，后端恢复 ready。两次 app 启动均使用临时 XDG 数据并在结束后清理。
 - E2E 构建支持仅在 Rust `e2e` feature 下通过 `NYAN_E2E_AGENT_ENTRY` 覆盖 agent 入口；production 和普通 debug 构建不会读取该测试开关，fault agent 也不进入 Tauri resource。
-- 真实桌面 E2E 现在顺序启动五次隔离 app：正常产品外壳同时验证完整坏 JSONL 行被清理、后续合法 assistant 历史保留且 running turn 恢复为 interrupted；Bun 缺失后运行中重检；fault agent 以 exit 37 触发独立 crash UI；输出非法 NDJSON 触发并稳定保留 `protocol_error` UI；真实后端读取非法 TOML 后在 product shell 以 `[config_invalid]` 展示结构化 command error，backend 仍保持 ready。
-- 本轮通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 同一 spec 顺序覆盖正常启动/坏记录恢复、Bun 缺失→恢复、exit 37 crash、非法 NDJSON 和非法配置五种真实 app 运行，production bundle 只有既有大 chunk 提示。
+- 真实桌面 E2E 现在顺序启动六次隔离 app：正常产品外壳同时验证完整坏 JSONL 行被清理、后续合法 assistant 历史保留且 running turn 恢复为 interrupted；Bun 缺失后运行中重检；fault agent 分别覆盖 exit 37 crash、非法 NDJSON 和 exit 38 后端进程树清理；真实后端读取非法 TOML 后在 product shell 以 `[config_invalid]` 展示结构化 command error，backend 仍保持 ready。
+- Rust supervisor 在启动 Bun 后立即创建独立 Windows Job Object、设置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE` 并关联 Bun PID；job handle 跟随当前 backend generation 的 exit task，正常关闭、受控 kill 或 Bun 自身 crash 后都会在退出收尾时终止仍存活的后代。
+- E2E 新增第六次真实 app 启动：fault agent 先启动一个延迟写标记文件的 Bun 后代并记录 PID，再以 exit 38 崩溃；测试断言 crash UI、后代 PID 消失且等待超过写入延迟后标记文件仍不存在。
+- 本轮通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 同一 spec 顺序覆盖正常启动/坏记录恢复、Bun 缺失→恢复、exit 37 crash、非法 NDJSON、后端进程树清理和非法配置六种真实 app 运行，production bundle 只有既有大 chunk 提示。
 
 ## 最近一轮没有做
 
 - 没有接入 CI E2E；当前稳定桌面 E2E 仍是本机 Windows 回归入口。release/NSIS smoke 已在阶段 6 完成，CI runner 留待后续。
-- 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 
 ## 完成定义

@@ -7,7 +7,7 @@ const appEnvironment = Object.fromEntries(requiredEnvironment.map((key) => {
   if (!value) throw new Error(`Missing E2E environment variable: ${key}`);
   return [key, value];
 }));
-for (const key of ["NYAN_E2E_SCENARIO", "NYAN_E2E_AGENT_ENTRY"] as const) {
+for (const key of ["NYAN_E2E_SCENARIO", "NYAN_E2E_AGENT_ENTRY", "NYAN_E2E_TREE_PID_FILE", "NYAN_E2E_TREE_MARKER_FILE"] as const) {
   if (process.env[key]) appEnvironment[key] = process.env[key]!;
 }
 if (process.env.NYAN_E2E_MISSING_BUN === "1") {

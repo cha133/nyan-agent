@@ -1,92 +1,71 @@
 # 跨会话交接
 
-状态：2026-07-19。阶段 1–5 已完成，阶段 6 进行中。本轮完成首批恢复/故障语义加固、production agent artifact、NSIS 隔离安装运行，以及 Bun 缺失→重新检测真实桌面 E2E。下一主线是 crash/非法协议/配置错误的桌面故障注入和真实 provider 三工具综合验收。
+状态：2026-07-19。阶段 1–5 已完成，阶段 6 进行中。恢复/结构化故障、production artifact、NSIS 安装、六类真实桌面 E2E 和 backend generation 进程树清理均已完成；剩余主线是真实 provider 桌面综合验收，以及 MVP 完成后沉淀正式 `AGENTS.md`。
 
 ## 新会话目标
 
 继续 [01-state.md](01-state.md) 的阶段 6，不需要重新讨论已审批的 [03-product.md](03-product.md) 和 [04-technical-plan.md](04-technical-plan.md)：
 
-1. 把 Bun 子进程 crash、非法 NDJSON、配置错误和恢复场景扩展到真实桌面 E2E，确保 UI 只消费结构化故障，不解析错误字符串。
-2. 使用本机现有 provider 配置完成真实桌面 shell/edit/subagent 综合回合、长进程轮询和停止验收；自动化测试不得读取真实密钥。
-3. 完成剩余 MVP 验收后，把 `.agents/docs` 中仍有效的约束沉淀为正式详细 `AGENTS.md`。
+1. 使用本机现有 provider 配置完成真实桌面 shell/edit/subagent 综合回合、长进程轮询和停止验收；不得输出、复制或提交 token，自动化测试不得读取真实密钥。
+2. 完成剩余 MVP 验收后，把 `.agents/docs` 中仍有效的约束沉淀为正式详细 `AGENTS.md`。
 
 ## 仓库现场
 
-- 工作区：`C:\Dev\nyan-agent`；分支：`main`，跟踪 `origin/main`。
-- 本轮恢复、故障语义、打包、安装和 E2E 改动以 `feat: harden recovery and release packaging` 提交；用户要求本轮提交但不要求 push。
+- 工作区：`C:\Dev\nyan-agent`；分支：`main`，领先 `origin/main` 1 个提交。
+- `cd12dff test: cover desktop backend failures` 包含坏 JSONL 恢复、Bun 缺失→重检、crash、非法 NDJSON 和非法配置五类真实桌面 E2E，以及仅在 `e2e` feature 生效的 fault-agent 入口。
+- 最新提交包含 Windows Job Object、process-tree 第六类桌面 E2E、Cargo 依赖/锁文件、本 handoff，以及同步更新的 `00-index.md`、`01-state.md`、`04-technical-plan.md`。
+- 本轮结束时工作区应干净；新会话仍应先运行 `git status --short --branch` 核对。
 - 包管理器和 agent 运行时为 Bun，本机实测 `1.3.14`；WebdriverIO 通过根 `mise.toml` 固定 Node 24。
-- Tauri `2.11.5`、AI SDK `7.0.31`、HeroUI `3.2.2`。
 
-## 当前实现
+## 最新切片：backend generation 进程树
 
-### 阶段 1–5
+- `platform/windows.rs` 新增 RAII Windows Job Object，设置 `JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE`。
+- Rust supervisor 启动 Bun 后立即把 PID 关联到独立 job；job handle 由对应 backend generation 的 exit task 持有。
+- Bun 正常关闭、受控 kill 或自身 crash 后，exit task 结束并关闭 job handle，仍存活的 Bun 后代会被操作系统级联终止。
+- `windows-sys 0.61` 作为 Windows target dependency，启用 Foundation、JobObjects、Threading features。
+- fault agent 新增 `process-tree` 场景：启动一个延迟写标记文件的 Bun 后代、记录 PID，然后以 exit 38 崩溃。
+- 第六次真实 app E2E 断言 crash UI、后代 PID 消失，并在超过写入延迟后确认标记文件不存在。
 
-- workspace 为 `apps/desktop`、`apps/agent`、`packages/protocol`；Rust 与桌面 app 共置于 `apps/desktop/src-tauri`。
-- TS/Rust v1 协议、NDJSON codec、Rust supervisor、Tauri Channel、Bun 探测与生命周期已完成。
-- Bun 后端使用 AI SDK v7 `ToolLoopAgent`，支持 Anthropic/OpenAI-compatible provider、模型发现/cache、停止、标题、JSONL 持久化和异常恢复；全局只允许一个活动主 turn。
-- 项目/任务 CRUD、项目 cwd、白色双栏外壳、Catppuccin Latte、Lexical、静态 Markdown transcript、增量侧栏、运行中只读切换、模型/项目最近状态均已完成。
-- shell 固定 PowerShell 7，支持 UTF-8、长命令回退、长进程 poll/write/kill、超时/取消和进程树清理。
-- edit 支持 exact、line-trimmed、indentation-flexible、whitespace-normalized、block-anchor，多匹配拒绝、跨度保护、原子写和 diff。
-- subagent 一次并发 1–3 项，只有 shell/edit，阻塞聚合、兄弟失败隔离、父取消级联；UI 每项只展示一行最新活动。
+## 阶段 6 已完成能力
 
-### 阶段 6：恢复与结构化故障
+- `SessionStore.recover()` 验证 UTF-8、record shape 和单调 seq；可原子清理单条完整坏记录，同时保留其后的合法历史，并把 running turn 恢复为 interrupted。
+- Rust supervisor 区分 `protocol_error` 与真正的 `backend.crashed`；协议故障不会被随后受控退出覆盖。
+- Tauri command rejection 端到端保留 `{ code, message, details }`；React 直接消费结构化状态，不解析错误字符串分类。
+- `bun run build:agent` 生成并 smoke production artifact；release 从 `$RESOURCE/agent/main.js` 启动。
+- Win11 x64 NSIS 已完成隔离安装/运行/卸载 smoke；安装版实际启动资源目录 artifact，关闭后 Bun 退出。
+- E2E fault-agent 入口只在 Rust `e2e` feature 下通过 `NYAN_E2E_AGENT_ENTRY` 生效，不进入 production resource，也不改变普通 debug 行为。
 
-- `SessionStore.recover()` 除截断尾部半行外，还会逐行验证 UTF-8、record shape 和单调 seq；单条完整坏记录通过原子重写清理，坏记录前后的合法历史继续保留。
-- Rust supervisor 新增独立 `protocol_error` 状态。非法 backend stdout 会发结构化 `backend.error`、终止 Bun，并保持协议错误，不再被随后发生的受控退出覆盖成通用 crash。
-- 真正的 Bun 意外退出仍是独立 `backend.crashed`；现有真实 Bun kill 集成测试继续覆盖。
-- Tauri command rejection 保留 `{ code, message, details }`；桌面 `backendState.ts` 直接投影 protocol error/crash，并按结构化 command error 格式化 UI，不解析字符串获取错误类别。
+## E2E 与最近验证
 
-### 阶段 6：production artifact 与安装
+- `bun run e2e` 顺序启动六次真实 Tauri/WebView2：
+  1. 正常产品外壳、项目上下文刷新恢复、完整坏 JSONL 行清理、后续 assistant 历史保留、running→interrupted。
+  2. 隔离 PATH 下 Bun unavailable，同一 app 中硬链接 Bun 后重新检测恢复 ready。
+  3. fault agent exit 37，UI 与 command bridge 均为结构化 crashed。
+  4. fault agent 输出非法 NDJSON，UI 与 backend status 稳定为 `protocol_error`。
+  5. fault agent exit 38 前启动后代，验证 Job Object 清理 PID 与延迟标记文件。
+  6. 真实 backend 读取非法 TOML，product shell 显示 `[config_invalid]`，backend 保持 ready。
+- 当前切片通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run test`、`bun run build`、`cargo fmt --check`、`git diff --check` 和六场景 `bun run e2e`。
+- production Vite bundle 仍只有既有的大于 500 KiB chunk warning，当前不阻塞 MVP。
 
-- `bun run build:agent` 生成 `apps/agent/dist/main.js` 后立即运行 `scripts/smoke-agent-artifact.ts`，在四套隔离 XDG 父目录中验证 bundled artifact 的 `initialize → shutdown`。
-- debug 和 E2E 构建继续使用 `apps/agent/src/main.ts`；release 使用 Tauri `$RESOURCE/agent/main.js`。
-- `tauri.conf.json` 将 `../../agent/dist/main.js` 映射到 `agent/main.js`，Tauri production build 也会先构建并 smoke artifact。
-- `tauri build --no-bundle` release 分支通过；Win11 x64 NSIS 已生成并确认清单包含 `nyan-agent.exe` 与 `agent/main.js`。
-- 安装包：`apps/desktop/src-tauri/target/release/bundle/nsis/nyan-agent_0.1.0_x64-setup.exe`，2,644,393 bytes，SHA-256 `5E1EC52412739BF985C59B54E6C69CA4981D3208070029D440905E60810101FD`。
-- 仓库 target 下完成隔离静默安装/运行/卸载：安装版实际以安装目录 artifact 启动全局 Bun；关闭窗口后 Bun 子进程退出；uninstaller 返回 0；测试目录已清理。
-
-## E2E 与调试
-
-- 稳定回归：`bun run e2e`；只构建用 `bun run e2e:build`，类型检查用 `bun run check:e2e`。首次运行先执行 `mise install`。
-- E2E 使用 WebdriverIO Tauri Service `embedded` provider 驱动真实 Tauri/WebView2；测试专用 Rust/前端插件、权限和 global Tauri API 不进入 production bundle。
-- `bun run e2e` 现在顺序启动两次真实 app：第一轮覆盖 ready、产品外壳、Tauri command bridge 和项目上下文刷新恢复；第二轮以隔离 PATH 验证 Bun unavailable，运行中把当前 Bun 硬链接进测试 bin 后点击“重新检测”，同一 app 恢复 ready。
-- E2E 临时 XDG、项目和 fake Bun bin 在结束后清理，不读取真实配置或凭据。
-- renderer 现场诊断继续使用 `bun run dev:inspect` 和 `chrome-cdp --browser tauri`；普通开发使用 `bun run dev`。
-- `@wdio/native-utils` 固定为 `2.5.0`；production bundle 的大于 500 KiB Vite chunk warning 当前不阻塞 MVP。
-
-## 真实模型配置
+## 真实模型配置与下一验收
 
 - 本机配置：`C:\Users\Admin\.config\nyan\config.toml`，不属于仓库，绝不能提交。
 - 默认模型：`ark/minimax-m3`；Anthropic-compatible base URL 为 `https://ark.cn-beijing.volces.com/api/coding/v1`。
 - 凭据使用 `auth_token_env = "ARK_TOKEN"`；配置只保存环境变量名。日志、文档和提交不得记录 token 值。
-- limits：`context_window = 1000000`、`max_output_tokens = 128000`；`maxOutputTokens` 已显式传给 AgentRunner。
-- 真实 AgentRunner 流式请求已返回 `NYAN_OK`；尚未完成真实桌面 shell/edit/subagent、长进程轮询、停止和工具卡片综合验收。
+- limits：`context_window = 1000000`、`max_output_tokens = 128000`；`maxOutputTokens` 已传给 AgentRunner。
+- 已完成 AgentRunner 真实流式 `NYAN_OK`；尚未完成真实桌面 shell/edit/subagent、长进程 poll、停止和工具卡片综合验收。
+- 真实验收应创建隔离测试项目/文件，完成后清理测试文件与会话；不要把真实配置复制到 E2E 临时目录，也不要把真实 provider 纳入自动回归。
 
-## 配置与数据路径
+## 调试与 chrome-cdp
 
-- 用户配置：`~/.config/nyan/config.toml`，程序只读；凭据优先使用环境变量引用。
-- Windows 默认路径：`~/.config/nyan`、`~/.local/share/nyan`、`~/.local/state/nyan`、`~/.cache/nyan`，不使用 `%APPDATA%`。
-- `XDG_CONFIG_HOME`、`XDG_DATA_HOME`、`XDG_STATE_HOME`、`XDG_CACHE_HOME` 都是父目录覆盖，隔离测试必须四者一起设置。
-- 数据布局：`projects.json`、`state.json`、`sessions/<uuid>/meta.json`、`sessions/<uuid>/transcript.jsonl`。
+- 普通开发：`bun run dev`；renderer/真实桌面验收：`bun run dev:inspect`。
+- 本机技能：`C:\Users\Admin\.agents\skills\chrome-cdp`。用户已明确修改其授权边界：当前开发/调试/验收范围内的本地 Tauri/WebView2 可直接连接，不再单独请求批准；Chrome/Edge 仍需明确批准。
+- 用 `node C:\Users\Admin\.agents\skills\chrome-cdp\scripts\cdp.mjs --browser tauri list` 发现 target，后续始终传 `--browser tauri`。
+- 结束时停止 `dev:inspect` 父进程，并确认 Tauri、Vite、Bun 及工具子进程均退出。
 
-## 最近验证
+## 下一会话建议顺序
 
-- `bun run check` 通过。
-- `bun run test` 通过：protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项。
-- `bun run build` 通过并包含 production agent artifact smoke；desktop production build 只有既有大 chunk warning。
-- `cargo fmt --check`、`git diff --check` 通过。
-- `tauri build --no-bundle` release 通过；NSIS 构建、资源清单、隔离安装/运行/卸载通过。
-- `bun run e2e` 通过：同一 spec 顺序覆盖正常恢复和 Bun 缺失→重新检测两次真实 app 运行。
-- shell 真实孙进程清理、app 关闭后的 Bun 子进程清理均已验证。
-
-## 下一会话建议执行顺序
-
-1. 检查 `git status`，按 [00-index.md](00-index.md) 顺序阅读产品、技术方案、状态和本文件。
-2. 设计测试专用 fault-injector 入口或 supervisor 注入点，把 crash、非法 NDJSON、配置错误和恢复场景带到真实桌面 E2E；不要让测试开关进入 production bundle。
-3. 用真实 provider 在桌面创建隔离测试项目，依次验收 shell、edit、subagent、长进程 poll 和停止，完成后清理测试文件与会话；不得输出或持久化 token。
-4. 每个阶段 6 切片完成后运行根级 check/test/build/e2e 并更新 [01-state.md](01-state.md)。
-5. MVP 验收完成后，将临时文档沉淀为正式详细 `AGENTS.md`。
-
-## 新会话开场建议
-
-工作区干净后，直接从“为真实桌面 E2E 增加 crash/非法协议/配置错误 fault injection”开始。production artifact、NSIS、Bun 缺失→重新检测、JSONL 坏行恢复和结构化错误链路已经完成，不要重复实现。
+1. 按 [00-index.md](00-index.md) 顺序阅读产品、技术方案、状态和本文件，并检查 git diff。
+2. 用 `bun run dev:inspect` 启动真实配置 app，通过 chrome-cdp 完成 shell→edit→subagent 综合回合，再分别验证长进程 poll 和停止。
+3. 检查 transcript 工具卡片、session JSONL、console/errors 和所有相关进程；清理验收项目/会话。
+4. 更新 [01-state.md](01-state.md)；MVP 验收完成后整理正式 `AGENTS.md`。

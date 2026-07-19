@@ -2221,6 +2221,7 @@ dependencies = [
  "tauri-plugin-wdio-webdriver",
  "tokio",
  "uuid",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]

@@ -8,8 +8,75 @@ use tauri::{
     window::{Effect, EffectsBuilder},
     Runtime, WebviewWindow,
 };
+use windows_sys::Win32::{
+    Foundation::{CloseHandle, HANDLE},
+    System::{
+        JobObjects::{
+            AssignProcessToJobObject, CreateJobObjectW, JobObjectExtendedLimitInformation,
+            SetInformationJobObject, JOBOBJECT_EXTENDED_LIMIT_INFORMATION,
+            JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE,
+        },
+        Threading::{OpenProcess, PROCESS_SET_QUOTA, PROCESS_TERMINATE},
+    },
+};
 
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+
+pub struct BackendProcessGroup(HANDLE);
+
+unsafe impl Send for BackendProcessGroup {}
+
+impl Drop for BackendProcessGroup {
+    fn drop(&mut self) {
+        if !self.0.is_null() {
+            unsafe { CloseHandle(self.0) };
+        }
+    }
+}
+
+pub fn assign_backend_process_group(pid: u32) -> Result<BackendProcessGroup, String> {
+    unsafe {
+        let job = CreateJobObjectW(std::ptr::null(), std::ptr::null());
+        if job.is_null() {
+            return Err(format!(
+                "Failed to create backend job object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let group = BackendProcessGroup(job);
+        let mut limits: JOBOBJECT_EXTENDED_LIMIT_INFORMATION = std::mem::zeroed();
+        limits.BasicLimitInformation.LimitFlags = JOB_OBJECT_LIMIT_KILL_ON_JOB_CLOSE;
+        if SetInformationJobObject(
+            job,
+            JobObjectExtendedLimitInformation,
+            &limits as *const _ as *const _,
+            std::mem::size_of::<JOBOBJECT_EXTENDED_LIMIT_INFORMATION>() as u32,
+        ) == 0
+        {
+            return Err(format!(
+                "Failed to configure backend job object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+
+        let process = OpenProcess(PROCESS_SET_QUOTA | PROCESS_TERMINATE, 0, pid);
+        if process.is_null() {
+            return Err(format!(
+                "Failed to open Bun backend process: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        let assigned = AssignProcessToJobObject(job, process);
+        CloseHandle(process);
+        if assigned == 0 {
+            return Err(format!(
+                "Failed to assign Bun backend to job object: {}",
+                std::io::Error::last_os_error()
+            ));
+        }
+        Ok(group)
+    }
+}
 
 pub fn apply_window_effects<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
     window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build())

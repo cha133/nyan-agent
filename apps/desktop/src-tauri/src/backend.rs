@@ -1,6 +1,6 @@
 use crate::{
     ndjson::{encode, NdjsonDecoder},
-    platform::{configure_no_window, detect_bun},
+    platform::{assign_backend_process_group, configure_no_window, detect_bun},
     protocol::{RequestId, ServerEnvelope, PROTOCOL_VERSION},
 };
 use serde::{Deserialize, Serialize};
@@ -170,6 +170,21 @@ impl BackendManager {
                 return Err(reason);
             }
         };
+        let process_group = match child
+            .id()
+            .ok_or_else(|| "The Bun backend process ID was unavailable.".to_owned())
+            .and_then(assign_backend_process_group)
+        {
+            Ok(group) => group,
+            Err(reason) => {
+                let _ = child.kill().await;
+                self.set_status(BackendStatus::Unavailable {
+                    reason: reason.clone(),
+                })
+                .await;
+                return Err(reason);
+            }
+        };
         let generation = self.inner.generation.fetch_add(1, Ordering::SeqCst) + 1;
         let stdin = child
             .stdin
@@ -200,6 +215,7 @@ impl BackendManager {
         });
         let exit_manager = self.clone();
         tauri::async_runtime::spawn(async move {
+            let _process_group = process_group;
             let exit = tokio::select! {
                 result = child.wait() => result,
                 control = control_rx.recv() => {

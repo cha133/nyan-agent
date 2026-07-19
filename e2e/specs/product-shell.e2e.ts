@@ -1,4 +1,4 @@
-import { link, readFile } from "node:fs/promises";
+import { link, readFile, stat } from "node:fs/promises";
 import { join } from "node:path";
 import { $, browser, expect } from "@wdio/globals";
 
@@ -16,6 +16,10 @@ describe("nyan desktop product shell", () => {
     }
     if (process.env.NYAN_E2E_SCENARIO === "config-invalid") {
       await verifyInvalidConfig();
+      return;
+    }
+    if (process.env.NYAN_E2E_SCENARIO === "process-tree") {
+      await verifyProcessTreeCleanup();
       return;
     }
     if (process.env.NYAN_E2E_MISSING_BUN === "1") {
@@ -82,6 +86,40 @@ async function verifyInvalidConfig(): Promise<void> {
   await expect(error).toHaveText(expect.stringContaining("[config_invalid]"));
   const status = await browser.tauri.execute(({ core }) => core.invoke("backend_status")) as { state: string };
   expect(status.state).toBe("ready");
+}
+
+async function verifyProcessTreeCleanup(): Promise<void> {
+  await $("main.centered-shell").waitForDisplayed();
+  await expect($(".status-card h1")).toHaveText("Agent 后端意外退出");
+  await expect($(".status-card pre")).toHaveText("退出代码：38");
+
+  const pid = Number(await readFile(process.env.NYAN_E2E_TREE_PID_FILE!, "utf8"));
+  expect(Number.isSafeInteger(pid)).toBe(true);
+  await browser.waitUntil(async () => !isProcessRunning(pid), {
+    timeout: 5_000,
+    interval: 100,
+    timeoutMsg: `backend descendant ${pid} survived the backend crash`,
+  });
+  await browser.pause(1_500);
+  expect(await fileExists(process.env.NYAN_E2E_TREE_MARKER_FILE!)).toBe(false);
+}
+
+function isProcessRunning(pid: number): boolean {
+  try {
+    process.kill(pid, 0);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+async function fileExists(path: string): Promise<boolean> {
+  try {
+    await stat(path);
+    return true;
+  } catch {
+    return false;
+  }
 }
 
 async function verifyMissingBunRecovery(): Promise<void> {

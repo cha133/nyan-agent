@@ -19,6 +19,8 @@ const recoveryTitle = "E2E recovery task";
 const sessionsDir = join(dataHome, "nyan", "sessions");
 const recoverySessionDir = join(sessionsDir, recoverySessionId);
 const faultAgentEntry = resolve(workspace, "e2e/fixtures/fault-agent.ts");
+const treePidFile = join(testRoot, "backend-descendant.pid");
+const treeMarkerFile = join(testRoot, "backend-descendant-marker.txt");
 
 try {
   await Promise.all([
@@ -97,6 +99,13 @@ try {
       NYAN_E2E_AGENT_ENTRY: faultAgentEntry,
     });
   }
+  await run([nodeExecutable, "node_modules/@wdio/cli/bin/wdio.js", "run", "e2e/wdio.conf.ts"], {
+    ...environment,
+    NYAN_E2E_SCENARIO: "process-tree",
+    NYAN_E2E_AGENT_ENTRY: faultAgentEntry,
+    NYAN_E2E_TREE_PID_FILE: treePidFile,
+    NYAN_E2E_TREE_MARKER_FILE: treeMarkerFile,
+  });
   const invalidConfigHome = join(testRoot, "invalid-config");
   await mkdir(join(invalidConfigHome, "nyan"), { recursive: true });
   await writeFile(join(invalidConfigHome, "nyan", "config.toml"), "version = definitely-invalid\n", "utf8");
