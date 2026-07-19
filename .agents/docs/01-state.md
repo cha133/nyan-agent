@@ -73,7 +73,7 @@
 - `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check` 与 `git diff --check` 通过。
 - `bun run dev` 已确认 Vite、Tauri desktop executable 和 Bun backend 正常启动；停止后没有遗留 nyan-agent/Bun 进程。
 - `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
-- 未使用真实凭据发起外部模型请求；provider 请求由 mock 覆盖，真实请求需用户配置 `~/.config/nyan/config.toml` 后手动验收。
+- 该阶段最初未使用真实凭据；2026-07-19 已在后续阶段用本机隔离配置完成 Anthropic-compatible 真实流式请求，详见阶段 4 验证记录。
 
 ## 下一步：阶段 4 — 产品外壳
 
@@ -86,7 +86,7 @@
 - [x] 增加 `projects.json` 原子存储以及项目 list/add/remove；项目路径必须是现有目录，重复添加稳定去重。
 - [x] 增加 session list/load/remove，metadata 可绑定 project ID；绑定项目使用项目目录作为 cwd，无项目任务回退到用户家目录。
 - [x] Rust/Tauri 暴露项目、任务和提交命令；原生目录选择使用 Tauri dialog plugin。
-- [x] 将阶段 3 验证页替换为 1200×800（最小 960×640）的白色双栏产品外壳，接入 HeroUI v3 Button/Select、Lucide 图标、各列表独立的可见状态和任务导航；当前代码仍是首次点击即展开全部，待按最新规则改为每次增加 10 条。
+- [x] 将阶段 3 验证页替换为 1200×800（最小 960×640）的白色双栏产品外壳，接入 HeroUI v3 Button/Select、Lucide 图标、各列表独立的可见状态和任务导航；列表现已按初始 5 条、每次增加 10 条和递归重置规则工作。
 - [x] 接入 Lexical 纯文本编辑器与 `react-markdown + remark-gfm` 静态 assistant block；恢复历史时从 transcript JSONL 映射展示项。
 - [x] 增加模型列表与最近模型选择 UI：新任务可显式选模型，既有闲置任务可更新模型，运行中禁止切换；有效选择在创建/更新任务时写入共享最近模型 state。
 - [x] 补齐新任务默认项目上下文的持久化：项目/无项目上下文写入共享 runtime state，重启后恢复，项目移除时自动清理失效引用，且不会与最近模型状态互相覆盖。
@@ -99,7 +99,7 @@
 
 ### 阶段 4 当前验证记录
 
-- protocol 7 项、agent 20 项、Rust 7 项测试通过；新增项目增删去重、非法目录、session 排序/删除、项目 cwd 绑定、默认项目上下文持久化与失效清理、模型列表/显式创建/更新，以及最近项目/模型状态合并写入覆盖。
+- protocol 7 项、agent 21 项、desktop 7 项、Rust 7 项测试通过；覆盖项目增删去重、非法目录、session 排序/删除、项目 cwd 绑定、默认项目上下文、模型配置/选择、环境变量凭据、侧栏增量展开、运行态恢复与标题事件。
 - `bun run check`、`bun run test`、`bun run build` 通过；desktop production bundle 仅有现阶段可接受的大 chunk 提示。
 - 使用 `bun run dev:inspect` 启动真实 Tauri，通过 `chrome-cdp --browser tauri` 自动发现 `DevToolsActivePort`；实测 1200×800 首屏、白色主题、无障碍树和 Lexical 中文输入，console warning 与未处理异常均为空。
 - 使用隔离的静态 provider 配置实测 HeroUI 模型 Select：可展示 provider/model、切换选项，并与项目选择、发送按钮保持同一行；修复异步模型加载导致的 uncontrolled → controlled warning 后复查 console 为空。
