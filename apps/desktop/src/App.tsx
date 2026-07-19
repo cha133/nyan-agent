@@ -3,7 +3,7 @@ import { Button, ListBox, Select } from "@heroui/react";
 import { Channel, invoke } from "@tauri-apps/api/core";
 import { open } from "@tauri-apps/plugin-dialog";
 import type { ServerMessage } from "@nyan/protocol";
-import { Folder, FolderPlus, MessageSquare, Plus, Send, Square, Trash2 } from "lucide-react";
+import { Folder, FolderPlus, MessageSquare, Plus, Send, Square, SquarePen, Trash2 } from "lucide-react";
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
@@ -298,7 +298,10 @@ function App() {
       <Titlebar />
     <main className="product-shell">
       <aside className="sidebar">
-        <Button fullWidth onPress={() => startDraft(draftProjectId)}><Plus size={17} />新建任务</Button>
+        <button type="button" className="sidebar-new-task" onClick={() => startDraft(draftProjectId)}>
+          <SquarePen size={14} />
+          新建任务
+        </button>
 
         <SidebarHeading label="项目" onAdd={addProject} isDisabled={isBusy} />
         <div className="nav-list">

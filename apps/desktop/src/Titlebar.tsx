@@ -35,7 +35,6 @@ export function Titlebar() {
   return (
     <header className="titlebar">
       <div className="titlebar-brand" data-tauri-drag-region>
-        <span className="brand-mark">N</span>
         <strong data-tauri-drag-region>Nyan Agent</strong>
       </div>
       <div className="titlebar-drag" data-tauri-drag-region />
