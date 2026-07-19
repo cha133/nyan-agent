@@ -1,22 +1,22 @@
-# MVP 产品约束
+# 产品约束
 
 ## 1. 用户与平台
 
 - 只有开发者本人一个用户，不为其他用户做兼容、权限审批、引导或扩展能力。
 - 只支持 Windows 11 26H1 及以上版本。
-- MVP 不编译 macOS/Linux，但进程启动、路径、窗口效果等平台相关逻辑应隔离，避免把 Windows 分支散落在业务层。
+- 当前产品不编译 macOS/Linux，但进程启动、路径、窗口效果等平台相关逻辑应隔离，避免把 Windows 分支散落在业务层。
 
 ## 2. 产品原则
 
 - YAGNI：只实现开发者本人能形成吃自己狗粮闭环的能力，不为未发生的兼容场景增加代码。
 - YOLO：不做 tool use 权限、不做 workspace 限制、不做 sandbox，模型和 subagent 对文件系统有完整读写能力。
 - 工具保持精简。能由 PowerShell 7 清晰完成的读取、搜索和文件操作不新增内置工具；只有 shell 难以可靠覆盖的能力才新增工具。
-- MVP 模型工具固定为 shell、edit、subagent。MCP、skill 和浏览器等以后优先接外部生态，不先重复实现内置版本。
+- 模型工具固定为 shell、edit、subagent。MCP、skill 和浏览器等以后优先接外部生态，不先重复实现内置版本。
 - 不做流式 Markdown 解析。文本流在 reasoning、tool call 或 turn 结束等边界收束为完整 block 后，再用 Markdown renderer 渲染。
 
 ## 3. Agent 能力
 
-MVP 只提供三个模型工具：
+当前只提供三个模型工具：
 
 ### shell
 
@@ -26,8 +26,8 @@ MVP 只提供三个模型工具：
 - 输出只按 UTF-8 字节预算截断，不引入 GPT tokenizer；截断时保留头尾并报告省略字节数。
 - 用单层 `-EncodedCommand` 传递“UTF-8 初始化脚本 + 用户命令”，避免中文和 Windows 命令行转义损坏；宿主按 UTF-8 解码 stdout/stderr。
 - 默认加载用户 PowerShell Profile，以保留 mise 等工具链管理器设置的项目运行时；agent 在启动前设置 `TERM=dumb` 与 `NYAN_AGENT=1`，供 Profile 在完成必要环境初始化后跳过 PSReadLine、主题、prompt 和其他纯交互增强。
-- shell 同时使用 PowerShell `-NonInteractive`，让输入提示直接失败而不是挂起；它不等价于 `-NoProfile`，MVP 默认不跳过 Profile。
-- 不做 sandbox 和工具权限审批；这是单用户、全读写 MVP 的明确取舍，但提示词仍提醒模型谨慎处理不可恢复操作。
+- shell 同时使用 PowerShell `-NonInteractive`，让输入提示直接失败而不是挂起；它不等价于 `-NoProfile`，默认不跳过 Profile。
+- 不做 sandbox 和工具权限审批；这是单用户、全读写产品的明确取舍，但提示词仍提醒模型谨慎处理不可恢复操作。
 
 ### edit
 
@@ -50,7 +50,7 @@ MVP 只提供三个模型工具：
 
 - 只支持 Anthropic-compatible 与 OpenAI-compatible provider，分别基于 `@ai-sdk/anthropic` 和 `@ai-sdk/openai-compatible`。
 - `~/.config/nyan/config.toml` 可配置多个 provider；每个 provider 可配置多个静态 model，也可开启动态模型发现。
-- API key、base URL、自定义 header 等 provider 凭据可直接配置在 `config.toml`；API key/auth token 也可通过 `api_key_env`/`auth_token_env` 引用启动进程环境变量。MVP 不接 Windows Credential Manager。
+- API key、base URL、自定义 header 等 provider 凭据可直接配置在 `config.toml`；API key/auth token 也可通过 `api_key_env`/`auth_token_env` 引用启动进程环境变量。当前不接 Windows Credential Manager。
 - 动态发现结果写入独立 cache 文件，不回写 `config.toml`；默认 TTL 为 1 小时。
 - 最近使用的模型在所有项目间共享。用户配置提供默认模型，运行时最近选择写入 state 文件，避免程序改写带注释的 TOML。
 - Windows 默认配置根目录固定为 `~/.config/nyan`，不使用 `%APPDATA%`。保留 XDG 环境变量作为显式路径覆盖，主要用于自动化测试和隔离真实配置。
@@ -69,7 +69,7 @@ MVP 只提供三个模型工具：
 
 ### 窗口
 
-- MVP 界面只开发白色主题，不实现深色主题、主题切换或跟随系统主题。
+- 界面只开发白色主题，不实现深色主题、主题切换或跟随系统主题。
 - 简化 Codex 桌面端布局：左侧栏、系统原生标题栏、右侧主内容。
 - 标题栏只显示 `nyan-agent` 和 Windows 默认最小化/最大化/关闭按钮，不做“文件/视图”等菜单。
 - 标题栏和左侧栏使用 Win11 Mica；主体内容保持清晰的不透明/半透明层级。
@@ -96,12 +96,12 @@ MVP 只提供三个模型工具：
 
 - 上部是 transcript，按时间展示用户消息、assistant 文本、工具调用和状态。
 - assistant 文本按完整 block 使用 `react-markdown + remark-gfm` 渲染；正在接收但尚未闭合的 block 只按纯文本预览，闭合后一次性切换为 Markdown。
-- 下部是 Lexical 编辑器；MVP 只作为纯文本多行输入，不支持 Markdown 富文本、mention 或 chip。
+- 下部是 Lexical 编辑器；只作为纯文本多行输入，不支持 Markdown 富文本、mention 或 chip。
 - 编辑器下一行依次提供模型选择、项目选择和发送按钮。
 - agent 工作时发送按钮切换为可点击的停止按钮。
 - 图标统一使用 Lucide React。
 - 第一个用户 turn 提交后，额外调用同一个主模型，根据首条用户消息生成短会话标题；不使用小模型，也不阻塞主 turn。
-- 工作中的任务允许切走查看其他历史任务，但 MVP 全局只运行一个主 agent turn。
+- 工作中的任务允许切走查看其他历史任务，但全局只运行一个主 agent turn。
 
 ## 7. 明确非目标
 

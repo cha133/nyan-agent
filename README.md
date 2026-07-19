@@ -7,6 +7,7 @@ Windows-first desktop coding agent built with Tauri, React, Bun, and the AI SDK.
 - `apps/desktop`: Tauri 2 + React/Vite desktop application
 - `apps/agent`: Bun agent backend
 - `packages/protocol`: shared desktop/backend protocol package
+- `docs/`: product and architecture docs; see [docs/README.md](docs/README.md) for the index and the convention for temporary docs on complex requirements (small changes do not need temporary docs)
 
 ## Commands
 
