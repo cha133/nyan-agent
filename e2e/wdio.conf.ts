@@ -7,6 +7,9 @@ const appEnvironment = Object.fromEntries(requiredEnvironment.map((key) => {
   if (!value) throw new Error(`Missing E2E environment variable: ${key}`);
   return [key, value];
 }));
+for (const key of ["NYAN_E2E_SCENARIO", "NYAN_E2E_AGENT_ENTRY"] as const) {
+  if (process.env[key]) appEnvironment[key] = process.env[key]!;
+}
 if (process.env.NYAN_E2E_MISSING_BUN === "1") {
   const fakeBin = process.env.NYAN_E2E_FAKE_BIN;
   if (!fakeBin) throw new Error("Missing E2E fake Bun directory");

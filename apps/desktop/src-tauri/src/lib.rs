@@ -10,6 +10,11 @@ use backend::{
 use serde_json::Value;
 use tauri::{ipc::Channel, Manager, State};
 
+#[cfg(feature = "e2e")]
+fn e2e_agent_entry() -> Option<std::path::PathBuf> {
+    std::env::var_os("NYAN_E2E_AGENT_ENTRY").map(std::path::PathBuf::from)
+}
+
 #[tauri::command]
 async fn backend_status(manager: State<'_, BackendManager>) -> Result<BackendStatus, String> {
     Ok(manager.status().await)
@@ -139,7 +144,14 @@ pub fn run() {
                 .get_webview_window("main")
                 .ok_or("main window was not created")?;
             platform::apply_window_effects(&main_window)?;
-            let agent_entry = if cfg!(debug_assertions) {
+            let agent_entry = if cfg!(feature = "e2e") {
+                #[cfg(feature = "e2e")]
+                {
+                    e2e_agent_entry().unwrap_or_else(development_agent_entry)
+                }
+                #[cfg(not(feature = "e2e"))]
+                unreachable!()
+            } else if cfg!(debug_assertions) {
                 development_agent_entry()
             } else {
                 packaged_agent_entry(&app.path().resource_dir()?)

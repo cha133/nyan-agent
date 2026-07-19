@@ -77,7 +77,7 @@
 
 ## 进行中：阶段 6 — 稳定与发布
 
-- 已完成第一批恢复与故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及 Bun 缺失→重新检测真实桌面 E2E；下一步把 crash/非法协议/配置错误故障注入扩展到桌面 E2E。
+- 已完成恢复与结构化故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及恢复、Bun 缺失→重新检测、crash、非法协议和配置错误真实桌面 E2E；下一步补充进程树清理桌面验收并进行真实 provider 综合验收。
 - 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 已完成：阶段 4 — 产品外壳
@@ -169,7 +169,8 @@
 - [x] production 构建固定先生成并 smoke `apps/agent/dist/main.js`；release 从 `$RESOURCE/agent/main.js` 启动，debug/E2E 保持源码入口，NSIS 资源清单包含同一 artifact。
 - [x] 生成 Win11 x64 NSIS 安装包并完成仓库 target 下的隔离静默安装/运行/卸载 smoke；安装后的 release app 实际启动安装目录 artifact，关闭窗口后 Bun 子进程退出。
 - [x] 真实桌面 E2E 用隔离 PATH 启动为 Bun unavailable，断言专用错误页与结构化状态；运行中把当前 Bun 硬链接进测试 PATH 后点击“重新检测”，同一 app 恢复 ready。
-- [ ] 将恢复、Bun 子进程崩溃、非法协议、配置错误和进程树清理故障注入扩展到真实桌面 E2E。
+- [x] 将坏 JSONL 恢复、Bun 子进程崩溃、非法协议和配置错误扩展到真实桌面 E2E。
+- [ ] 补充进程树清理的真实桌面故障验收。
 - [ ] 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止。
 - [ ] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
 
@@ -181,7 +182,9 @@
 - production artifact smoke 使用四套隔离 XDG 父目录真实执行 bundled `main.js` 的 `initialize → shutdown`；`tauri build --no-bundle` 的 release 分支通过，NSIS 清单确认包含 10.8 MiB app 与 1.56 MiB `agent/main.js`。
 - NSIS `nyan-agent_0.1.0_x64-setup.exe` 为 2,644,393 bytes，SHA-256 `5E1EC52412739BF985C59B54E6C69CA4981D3208070029D440905E60810101FD`；隔离安装后观测到全局 Bun 以安装路径 artifact 为参数启动，关闭 app 后该子进程消失，uninstaller 返回 0，剩余空测试目录已清理。
 - E2E 新增第二次真实 app 启动：PATH 初始只有空测试 bin 与 System32，确认 unavailable；随后把当前 Bun 硬链接进同一 PATH 并点击重新检测，后端恢复 ready。两次 app 启动均使用临时 XDG 数据并在结束后清理。
-- 本轮通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为同一 spec 的正常恢复与 Bun 缺失→恢复两种真实 app 运行，production bundle 只有既有大 chunk 提示。
+- E2E 构建支持仅在 Rust `e2e` feature 下通过 `NYAN_E2E_AGENT_ENTRY` 覆盖 agent 入口；production 和普通 debug 构建不会读取该测试开关，fault agent 也不进入 Tauri resource。
+- 真实桌面 E2E 现在顺序启动五次隔离 app：正常产品外壳同时验证完整坏 JSONL 行被清理、后续合法 assistant 历史保留且 running turn 恢复为 interrupted；Bun 缺失后运行中重检；fault agent 以 exit 37 触发独立 crash UI；输出非法 NDJSON 触发并稳定保留 `protocol_error` UI；真实后端读取非法 TOML 后在 product shell 以 `[config_invalid]` 展示结构化 command error，backend 仍保持 ready。
+- 本轮通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 同一 spec 顺序覆盖正常启动/坏记录恢复、Bun 缺失→恢复、exit 37 crash、非法 NDJSON 和非法配置五种真实 app 运行，production bundle 只有既有大 chunk 提示。
 
 ## 最近一轮没有做
 

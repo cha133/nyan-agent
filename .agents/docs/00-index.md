@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 5 已完成，阶段 6 进行中；首批恢复/故障语义、production artifact、NSIS 隔离安装运行及 Bun 缺失→重新检测 E2E 已完成，下一步扩展 crash/非法协议/配置错误桌面故障注入并做真实 provider 综合验收。
+- 当前状态：阶段 5 已完成，阶段 6 进行中；恢复、crash、非法协议、配置错误与 Bun 缺失→重新检测的真实桌面 E2E，以及 production artifact 和 NSIS 隔离安装运行均已完成，下一步补充进程树清理桌面验收并做真实 provider 综合验收。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 
