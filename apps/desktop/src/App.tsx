@@ -298,6 +298,9 @@ function App() {
       <Titlebar />
     <main className="product-shell">
       <aside className="sidebar">
+        <div className="sidebar-brand">
+          Nyan Agent
+        </div>
         <button type="button" className="sidebar-new-task" onClick={() => startDraft(draftProjectId)}>
           <SquarePen size={14} />
           新建任务

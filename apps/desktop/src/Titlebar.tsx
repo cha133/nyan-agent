@@ -34,9 +34,6 @@ export function Titlebar() {
 
   return (
     <header className="titlebar">
-      <div className="titlebar-brand" data-tauri-drag-region>
-        <strong data-tauri-drag-region>Nyan Agent</strong>
-      </div>
       <div className="titlebar-drag" data-tauri-drag-region />
       <div className="titlebar-controls">
         <button
