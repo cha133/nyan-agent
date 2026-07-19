@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 5 已完成，阶段 6 进行中；恢复、crash、非法协议、配置错误、Bun 缺失→重新检测和后端进程树清理的真实桌面 E2E，以及 production artifact 和 NSIS 隔离安装运行均已完成，下一步做真实 provider 综合验收。
+- 当前状态：MVP 阶段 1–6 已完成；真实 provider 的 shell/edit/subagent、长进程轮询与停止综合验收通过，AI SDK warning stdout 污染和 StrictMode 重复 Channel 订阅已修复，正式工程约束已沉淀到根 `AGENTS.md`。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 

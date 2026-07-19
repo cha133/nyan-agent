@@ -37,8 +37,10 @@ function App() {
   const [visibleLimits, setVisibleLimits] = useState<Record<string, number>>({});
 
   useEffect(() => {
+    let active = true;
     const channel = new Channel<ServerMessage>();
     channel.onmessage = (message) => {
+      if (!active) return;
       const failureStatus = failureStatusFromMessage(message);
       if (failureStatus) {
         setSubmitting(false);
@@ -88,10 +90,21 @@ function App() {
       if (message.type === "turn.failed") setError(message.error.message);
     };
 
-    Promise.all([
-      invoke<void>("backend_subscribe", { onEvent: channel }),
-      invoke<BackendStatus>("backend_status").then(setStatus),
-    ]).catch((reason: unknown) => setError(formatBackendError(reason)));
+    const subscriptionTimer = window.setTimeout(() => {
+      Promise.all([
+        invoke<void>("backend_subscribe", { onEvent: channel }),
+        invoke<BackendStatus>("backend_status").then((nextStatus) => {
+          if (active) setStatus(nextStatus);
+        }),
+      ]).catch((reason: unknown) => {
+        if (active) setError(formatBackendError(reason));
+      });
+    }, 0);
+
+    return () => {
+      active = false;
+      window.clearTimeout(subscriptionTimer);
+    };
   }, []);
 
   useEffect(() => {

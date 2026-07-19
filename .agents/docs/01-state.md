@@ -75,9 +75,9 @@
 - `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
 - 该阶段最初未使用真实凭据；2026-07-19 已在后续阶段用本机隔离配置完成 Anthropic-compatible 真实流式请求，详见阶段 4 验证记录。
 
-## 进行中：阶段 6 — 稳定与发布
+## 已完成：阶段 6 — 稳定与发布
 
-- 已完成恢复与结构化故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及恢复、Bun 缺失→重新检测、crash、非法协议、配置错误和后端进程树清理真实桌面 E2E；下一步进行真实 provider 综合验收。
+- 已完成恢复与结构化故障语义加固、production artifact、NSIS 隔离安装运行 smoke、六类真实桌面 E2E，以及真实 provider 的 shell/edit/subagent、长进程轮询和停止综合验收。
 - 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 已完成：阶段 4 — 产品外壳
@@ -171,11 +171,17 @@
 - [x] 真实桌面 E2E 用隔离 PATH 启动为 Bun unavailable，断言专用错误页与结构化状态；运行中把当前 Bun 硬链接进测试 PATH 后点击“重新检测”，同一 app 恢复 ready。
 - [x] 将坏 JSONL 恢复、Bun 子进程崩溃、非法协议和配置错误扩展到真实桌面 E2E。
 - [x] 用 Windows Job Object 确保 Bun 后端异常退出或受控关闭时级联终止其后代，并补充真实桌面故障验收。
-- [ ] 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止。
-- [ ] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
+- [x] 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止。
+- [x] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
 
 ### 阶段 6 当前验证记录
 
+- 使用本机 `ark/minimax-m3` 在真实 Tauri/WebView2 中完成综合回合：主 agent shell 读取 `alpha`、edit 精确替换为 `beta`、两个只读 subagent 并行读取文件/列目录、主 agent shell 复验 `beta`，transcript 与 JSONL 工具记录一致。
+- 首轮真实工具回合暴露 AI SDK warning 默认通过 `console.info` 写 stdout、破坏 NDJSON 的发布阻断问题；后端现在通过官方 `AI_SDK_LOG_WARNINGS` 全局把 warning 结构化写入 stderr，并新增回归测试。真实 provider 复验后不再出现 `protocol_error`。
+- 长进程验收使用 `yieldTimeMs=100` 首次返回 `running + processId`，随后同一 ID poll 得到 `completed / exitCode 0 / POLL_OK`；停止验收在运行中点击 UI 停止，turn 变为 cancelled，shell 卡片为 cancelled，等待超过原命令延迟后标记文件仍不存在。
+- 真实开发模式验收发现 React StrictMode 造成 Tauri Channel 双订阅，实时 assistant block 与工具卡片重复显示；订阅现延迟到 StrictMode 首轮 cleanup 之后并带失活保护。重启复验同一 `SINGLE_OK` 只显示一次，console warning 与未处理异常均为空。
+- 根 `AGENTS.md` 已从临时入口扩充为正式工程指南，覆盖产品边界、架构、协议、provider/敏感信息、三个工具、持久化/UI、测试发布和调试规则。
+- MVP 收尾回归通过 `bun run check`、protocol 7 项、agent 54 项、desktop 12 项、Rust 10 项、`bun run build`、production agent artifact smoke、`cargo fmt --check`、`git diff --check` 与六次隔离真实 Tauri `bun run e2e`；production bundle 仍只有既有大 chunk 提示。
 - 新增 JSONL 单条完整坏记录恢复测试；合法的前后记录均保留，恢复后的 transcript 继续使用单调 seq，运行中 session 正确转为 interrupted。
 - 新增真实 Bun fault-injector 集成测试，验证 invalid JSON stdout 会终止子进程并稳定保留结构化协议错误；既有直接 kill 测试继续验证真正的意外退出为 crashed。
 - 新增 Rust command error 边界和桌面状态投影测试，覆盖 `config_invalid` 等后端错误代码跨 Tauri command 保留，以及 protocol error/crash 的 UI 分类。

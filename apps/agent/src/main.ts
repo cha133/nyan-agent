@@ -1,8 +1,10 @@
 import { createNdjsonWriter, NdjsonDecoder, parseClientMessage, type ProtocolError } from "@nyan/protocol";
 import type { ServerMessage } from "@nyan/protocol";
 import { AgentBackend } from "./backend";
+import { configureRuntimeLogging } from "./runtime-logging";
 
 export async function run(): Promise<void> {
+  configureRuntimeLogging();
   const decoder = new NdjsonDecoder(parseClientMessage);
   const rawWrite = createNdjsonWriter(process.stdout);
   let writeQueue = Promise.resolve();
