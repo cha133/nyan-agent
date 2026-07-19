@@ -6,7 +6,7 @@
   "build": {
     "beforeDevCommand": "bun run dev",
     "devUrl": "http://localhost:1420",
-    "beforeBuildCommand": "bun run build",
+    "beforeBuildCommand": "bun run build:agent && bun run build",
     "frontendDist": "../dist"
   },
   "app": {
@@ -28,6 +28,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "resources": {
+      "../../agent/dist/main.js": "agent/main.js"
+    },
     "icon": [
       "icons/32x32.png",
       "icons/128x128.png",

@@ -6,6 +6,7 @@
   "scripts": {
     "dev": "vite",
     "build": "tsc && vite build",
+    "build:agent": "bun run --cwd ../agent build && bun run ../../scripts/smoke-agent-artifact.ts",
     "build:e2e": "tsc && vite build --mode e2e",
     "preview": "vite preview",
     "tauri": "tauri",

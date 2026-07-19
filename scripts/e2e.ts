@@ -12,6 +12,7 @@ const dataHome = join(testRoot, "data");
 const stateHome = join(testRoot, "state");
 const cacheHome = join(testRoot, "cache");
 const stateFile = join(stateHome, "nyan", "state.json");
+const fakeBin = join(testRoot, "fake-bin");
 
 try {
   await Promise.all([
@@ -19,6 +20,7 @@ try {
     mkdir(join(dataHome, "nyan"), { recursive: true }),
     mkdir(join(stateHome, "nyan"), { recursive: true }),
     mkdir(cacheHome, { recursive: true }),
+    mkdir(fakeBin, { recursive: true }),
     mkdir(projectPath, { recursive: true }),
   ]);
   const now = "2026-07-19T00:00:00.000Z";
@@ -52,10 +54,16 @@ try {
     NYAN_E2E_PROJECT_NAME: projectName,
     NYAN_E2E_PROJECT_PATH: projectPath,
     NYAN_E2E_STATE_FILE: stateFile,
+    NYAN_E2E_FAKE_BIN: fakeBin,
+    NYAN_E2E_BUN_SOURCE: process.execPath,
   };
   await run(["bun", "run", "e2e:build"], environment);
   const nodeExecutable = await output(["mise", "which", "node"], process.env);
   await run([nodeExecutable, "node_modules/@wdio/cli/bin/wdio.js", "run", "e2e/wdio.conf.ts"], environment);
+  await run([nodeExecutable, "node_modules/@wdio/cli/bin/wdio.js", "run", "e2e/wdio.conf.ts"], {
+    ...environment,
+    NYAN_E2E_MISSING_BUN: "1",
+  });
 } finally {
   if (dirname(testRoot) === tmpdir() && basename(testRoot).startsWith("nyan-e2e-")) {
     await rm(testRoot, { recursive: true, force: true });

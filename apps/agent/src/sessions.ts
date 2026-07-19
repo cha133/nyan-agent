@@ -2,7 +2,7 @@ import type { ModelMessage } from "ai";
 import type { ProjectId, SessionId, TurnId } from "@nyan/protocol";
 import { mkdir, open, readFile, readdir, rm, truncate } from "node:fs/promises";
 import { join } from "node:path";
-import { atomicWriteJson, isNotFound, readJsonFile } from "./files";
+import { atomicWriteFile, atomicWriteJson, isNotFound, readJsonFile } from "./files";
 import type { NyanPaths } from "./paths";
 
 export type SessionStatus = "idle" | "running" | "completed" | "failed" | "cancelled" | "interrupted";
@@ -153,9 +153,32 @@ export class SessionStore {
       if (isNotFound(error)) return;
       throw error;
     }
-    if (buffer.length > 0 && buffer[buffer.length - 1] !== 0x0a) {
-      const lastNewline = buffer.lastIndexOf(0x0a);
-      await truncate(file, lastNewline < 0 ? 0 : lastNewline + 1);
+    const hasPartialTail = buffer.length > 0 && buffer[buffer.length - 1] !== 0x0a;
+    const completeLength = hasPartialTail ? buffer.lastIndexOf(0x0a) + 1 : buffer.length;
+    const validLines: Buffer[] = [];
+    let start = 0;
+    let lastSeq = -1;
+    let discardedCompleteLine = false;
+    for (let index = 0; index < completeLength; index += 1) {
+      if (buffer[index] !== 0x0a) continue;
+      const rawLine = buffer.subarray(start, index);
+      start = index + 1;
+      if (rawLine.length === 0) continue;
+      try {
+        const text = new TextDecoder("utf-8", { fatal: true }).decode(rawLine);
+        const record = JSON.parse(text.endsWith("\r") ? text.slice(0, -1) : text) as unknown;
+        if (!isTranscriptRecord(record) || record.seq <= lastSeq) throw new Error("invalid transcript record");
+        lastSeq = record.seq;
+        validLines.push(rawLine);
+      } catch {
+        discardedCompleteLine = true;
+      }
+    }
+    if (discardedCompleteLine) {
+      const recovered = Buffer.concat(validLines.flatMap((line) => [line, Buffer.from("\n")]));
+      await atomicWriteFile(file, recovered);
+    } else if (hasPartialTail) {
+      await truncate(file, completeLength);
     }
     this.nextSeq.delete(id);
   }
@@ -187,4 +210,16 @@ export class SessionStore {
   private sessionDir(id: SessionId): string { return join(this.paths.sessionsDir, id); }
   private metaFile(id: SessionId): string { return join(this.sessionDir(id), "meta.json"); }
   private transcriptFile(id: SessionId): string { return join(this.sessionDir(id), "transcript.jsonl"); }
+}
+
+function isTranscriptRecord(value: unknown): value is TranscriptRecord {
+  if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+  const record = value as Record<string, unknown>;
+  return record.schemaVersion === 1
+    && Number.isSafeInteger(record.seq)
+    && (record.seq as number) >= 0
+    && typeof record.createdAt === "string"
+    && typeof record.kind === "string"
+    && "payload" in record
+    && (record.turnId === undefined || typeof record.turnId === "string");
 }

@@ -7,17 +7,11 @@ import { Folder, FolderPlus, MessageSquare, Plus, Send, Square, Trash2 } from "l
 import Markdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
+import { failureStatusFromMessage, formatBackendError, type BackendStatus } from "./backendState";
 import { INITIAL_VISIBLE_ITEMS, nextVisibleLimit, resetVisibleLimits, visibleItems, visibleLimit } from "./listVisibility";
 import { activeTurnFromSessions } from "./sessionState";
 import { formatToolCompletion, formatToolStart, toolHeading, toTranscriptItems, updateSubagentItem, updateToolItem, type TranscriptItem, type TranscriptRecord } from "./transcript";
 import "./App.css";
-
-type BackendStatus =
-  | { state: "starting" }
-  | { state: "ready"; bunPath: string; bunVersion: string }
-  | { state: "unavailable"; reason: string }
-  | { state: "crashed"; exitCode: number | null; message: string }
-  | { state: "stopped" };
 
 type Project = { id: string; name: string; path: string; createdAt: string; updatedAt: string };
 type Session = { id: string; projectId?: string; cwd: string; title: string; model: string; status: string; createdAt: string; updatedAt: string; activeTurnId?: string };
@@ -45,10 +39,11 @@ function App() {
   useEffect(() => {
     const channel = new Channel<ServerMessage>();
     channel.onmessage = (message) => {
-      if (message.type === "backend.crashed") {
+      const failureStatus = failureStatusFromMessage(message);
+      if (failureStatus) {
         setSubmitting(false);
         setActiveTurn(undefined);
-        setStatus({ state: "crashed", exitCode: message.exitCode, message: message.message });
+        setStatus(failureStatus);
         return;
       }
       if (message.type === "session.title.updated") {
@@ -96,7 +91,7 @@ function App() {
     Promise.all([
       invoke<void>("backend_subscribe", { onEvent: channel }),
       invoke<BackendStatus>("backend_status").then(setStatus),
-    ]).catch((reason: unknown) => setError(String(reason)));
+    ]).catch((reason: unknown) => setError(formatBackendError(reason)));
   }, []);
 
   useEffect(() => {
@@ -128,7 +123,7 @@ function App() {
       setDraftModelKey((current) => current && modelResult.value.models.some((model) => model.key === current) ? current : modelResult.value.selectedModel);
     }
     const failure = [projectResult, sessionResult, modelResult].find((result) => result.status === "rejected");
-    if (failure?.status === "rejected") setError(String(failure.reason));
+    if (failure?.status === "rejected") setError(formatBackendError(failure.reason));
   }
 
   async function restartBackend() {
@@ -137,7 +132,7 @@ function App() {
     try {
       setStatus(await invoke<BackendStatus>("backend_restart"));
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
       setStatus(await invoke<BackendStatus>("backend_status"));
     }
   }
@@ -156,7 +151,7 @@ function App() {
     try {
       await invoke("set_project_context", { projectId: projectId ?? null });
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -168,7 +163,7 @@ function App() {
       await refreshLists();
       startDraft(result.project.id);
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -180,7 +175,7 @@ function App() {
       if (draftProjectId === project.id) startDraft();
       await refreshLists();
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -195,7 +190,7 @@ function App() {
       setStreamingText("");
       setError("");
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -207,7 +202,7 @@ function App() {
       if (selectedSession?.id === session.id) startDraft(session.projectId);
       await refreshLists();
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -224,7 +219,7 @@ function App() {
       setSessions((current) => current.map((session) => session.id === result.session.id ? result.session : session));
       setDraftModelKey(key);
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -249,7 +244,7 @@ function App() {
       setSubmitting(false);
       await refreshLists();
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
       setSubmitting(false);
     }
   }
@@ -259,7 +254,7 @@ function App() {
     try {
       await invoke("cancel_turn", { sessionId: activeTurn.sessionId, turnId: activeTurn.turnId });
     } catch (reason) {
-      setError(String(reason));
+      setError(formatBackendError(reason));
     }
   }
 
@@ -386,14 +381,17 @@ function App() {
 function BackendScreen({ status, error, restart }: { status: BackendStatus; error: string; restart: () => void }) {
   const unavailable = status.state === "unavailable";
   const crashed = status.state === "crashed";
-  return <main className="centered-shell"><section className={`status-card ${unavailable || crashed ? "error-card" : ""}`}>
-    <p className="eyebrow">{unavailable ? "后端不可用" : crashed ? "后端已停止" : "正在启动"}</p>
-    <h1>{unavailable ? "未找到 Bun" : crashed ? "Agent 后端意外退出" : "正在连接 Agent…"}</h1>
+  const protocolError = status.state === "protocol_error";
+  return <main className="centered-shell"><section className={`status-card ${unavailable || crashed || protocolError ? "error-card" : ""}`}>
+    <p className="eyebrow">{unavailable ? "后端不可用" : crashed ? "后端已停止" : protocolError ? "协议故障" : "正在启动"}</p>
+    <h1>{unavailable ? "未找到 Bun" : crashed ? "Agent 后端意外退出" : protocolError ? "Agent 通信协议错误" : "正在连接 Agent…"}</h1>
     {unavailable && <p>nyan-agent 使用全局安装的 Bun 运行后端。安装后可重新检测。</p>}
     {crashed && <p>{status.message}</p>}
+    {protocolError && <p>{status.error.message}</p>}
     {(unavailable || crashed) && <pre>{unavailable ? status.reason : `退出代码：${status.exitCode ?? "未知"}`}</pre>}
+    {protocolError && <pre>错误代码：{status.error.code}</pre>}
     {error && <p className="error-text">{error}</p>}
-    {(unavailable || crashed) && <Button onPress={restart}>重新检测</Button>}
+    {(unavailable || crashed || protocolError) && <Button onPress={restart}>重新检测</Button>}
   </section></main>;
 }
 

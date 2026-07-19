@@ -3,7 +3,10 @@ mod ndjson;
 mod platform;
 mod protocol;
 
-use backend::{development_agent_entry, BackendManager, BackendStatus};
+use backend::{
+    development_agent_entry, packaged_agent_entry, BackendCommandError, BackendManager,
+    BackendStatus,
+};
 use serde_json::Value;
 use tauri::{ipc::Channel, Manager, State};
 
@@ -32,17 +35,20 @@ async fn submit_prompt(
     manager: State<'_, BackendManager>,
     session_id: String,
     prompt: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.submit_prompt(session_id, prompt).await
 }
 
 #[tauri::command]
-async fn list_projects(manager: State<'_, BackendManager>) -> Result<Value, String> {
+async fn list_projects(manager: State<'_, BackendManager>) -> Result<Value, BackendCommandError> {
     manager.list_projects().await
 }
 
 #[tauri::command]
-async fn add_project(manager: State<'_, BackendManager>, path: String) -> Result<Value, String> {
+async fn add_project(
+    manager: State<'_, BackendManager>,
+    path: String,
+) -> Result<Value, BackendCommandError> {
     manager.add_project(path).await
 }
 
@@ -50,7 +56,7 @@ async fn add_project(manager: State<'_, BackendManager>, path: String) -> Result
 async fn remove_project(
     manager: State<'_, BackendManager>,
     project_id: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.remove_project(project_id).await
 }
 
@@ -58,12 +64,12 @@ async fn remove_project(
 async fn set_project_context(
     manager: State<'_, BackendManager>,
     project_id: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.set_project_context(project_id).await
 }
 
 #[tauri::command]
-async fn list_sessions(manager: State<'_, BackendManager>) -> Result<Value, String> {
+async fn list_sessions(manager: State<'_, BackendManager>) -> Result<Value, BackendCommandError> {
     manager.list_sessions().await
 }
 
@@ -71,7 +77,7 @@ async fn list_sessions(manager: State<'_, BackendManager>) -> Result<Value, Stri
 async fn list_models(
     manager: State<'_, BackendManager>,
     refresh: Option<bool>,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.list_models(refresh.unwrap_or(false)).await
 }
 
@@ -80,7 +86,7 @@ async fn create_session(
     manager: State<'_, BackendManager>,
     project_id: Option<String>,
     model: Option<String>,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.create_session(project_id, model).await
 }
 
@@ -88,7 +94,7 @@ async fn create_session(
 async fn load_session(
     manager: State<'_, BackendManager>,
     session_id: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.load_session(session_id).await
 }
 
@@ -97,7 +103,7 @@ async fn set_session_model(
     manager: State<'_, BackendManager>,
     session_id: String,
     model: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.set_session_model(session_id, model).await
 }
 
@@ -105,7 +111,7 @@ async fn set_session_model(
 async fn remove_session(
     manager: State<'_, BackendManager>,
     session_id: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.remove_session(session_id).await
 }
 
@@ -114,14 +120,12 @@ async fn cancel_turn(
     manager: State<'_, BackendManager>,
     session_id: String,
     turn_id: String,
-) -> Result<Value, String> {
+) -> Result<Value, BackendCommandError> {
     manager.cancel_turn(session_id, turn_id).await
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    let manager = BackendManager::new(development_agent_entry());
-    let startup_manager = manager.clone();
     let builder = tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
         .plugin(tauri_plugin_dialog::init());
@@ -130,12 +134,19 @@ pub fn run() {
         .plugin(tauri_plugin_wdio::init())
         .plugin(tauri_plugin_wdio_webdriver::init());
     let app = builder
-        .manage(manager)
-        .setup(move |app| {
+        .setup(|app| {
             let main_window = app
                 .get_webview_window("main")
                 .ok_or("main window was not created")?;
             platform::apply_window_effects(&main_window)?;
+            let agent_entry = if cfg!(debug_assertions) {
+                development_agent_entry()
+            } else {
+                packaged_agent_entry(&app.path().resource_dir()?)
+            };
+            let manager = BackendManager::new(agent_entry);
+            let startup_manager = manager.clone();
+            app.manage(manager);
             let _ = tauri::async_runtime::block_on(startup_manager.start());
             Ok(())
         })

@@ -7,6 +7,13 @@ const appEnvironment = Object.fromEntries(requiredEnvironment.map((key) => {
   if (!value) throw new Error(`Missing E2E environment variable: ${key}`);
   return [key, value];
 }));
+if (process.env.NYAN_E2E_MISSING_BUN === "1") {
+  const fakeBin = process.env.NYAN_E2E_FAKE_BIN;
+  if (!fakeBin) throw new Error("Missing E2E fake Bun directory");
+  const isolatedPath = `${fakeBin};${process.env.SystemRoot ?? "C:\\Windows"}\\System32`;
+  appEnvironment.PATH = isolatedPath;
+  appEnvironment.Path = isolatedPath;
+}
 
 export const config: WebdriverIO.Config = {
   runner: "local",

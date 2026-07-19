@@ -75,13 +75,12 @@
 - `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
 - 该阶段最初未使用真实凭据；2026-07-19 已在后续阶段用本机隔离配置完成 Anthropic-compatible 真实流式请求，详见阶段 4 验证记录。
 
-## 下一步：阶段 6 — 稳定与发布
+## 进行中：阶段 6 — 稳定与发布
 
-- 补齐端到端恢复、子进程崩溃、非法协议、配置错误和进程树清理测试。
-- 验证 agent artifact 打包、全新机器 Bun 检测及 Win11 安装包。
+- 已完成第一批恢复与故障语义加固、production artifact、NSIS 隔离安装运行 smoke，以及 Bun 缺失→重新检测真实桌面 E2E；下一步把 crash/非法协议/配置错误故障注入扩展到桌面 E2E。
 - 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止；自动化底层覆盖已完成。
 
-## 进行中：阶段 4 — 产品外壳
+## 已完成：阶段 4 — 产品外壳
 
 - [x] 增加 `projects.json` 原子存储以及项目 list/add/remove；项目路径必须是现有目录，重复添加稳定去重。
 - [x] 增加 session list/load/remove，metadata 可绑定 project ID；绑定项目使用项目目录作为 cwd，无项目任务回退到用户家目录。
@@ -164,13 +163,29 @@
 
 ### 阶段 6 — 稳定与发布
 
-- [ ] 补齐端到端恢复、子进程崩溃、非法协议、配置错误和进程树清理测试。
-- [ ] 验证 agent artifact 打包、全新机器 Bun 检测及 Win11 安装包。
+- [x] JSONL 恢复除尾部半行外，能够原子清理单条完整坏记录，同时保留坏记录之后的合法历史、单调 seq 和运行中 turn 的 interrupted 终态。
+- [x] Rust supervisor 用真实 Bun 故障注入覆盖非法 NDJSON；协议故障保持独立 `protocol_error` 状态，不再被随后发生的受控进程退出覆盖为通用 crash。
+- [x] 桌面端区分 `backend.error` 与 `backend.crashed`，并让 Tauri command rejection 端到端保留 `{ code, message, details }`；配置错误 UI 不再依赖解析错误字符串。
+- [x] production 构建固定先生成并 smoke `apps/agent/dist/main.js`；release 从 `$RESOURCE/agent/main.js` 启动，debug/E2E 保持源码入口，NSIS 资源清单包含同一 artifact。
+- [x] 生成 Win11 x64 NSIS 安装包并完成仓库 target 下的隔离静默安装/运行/卸载 smoke；安装后的 release app 实际启动安装目录 artifact，关闭窗口后 Bun 子进程退出。
+- [x] 真实桌面 E2E 用隔离 PATH 启动为 Bun unavailable，断言专用错误页与结构化状态；运行中把当前 Bun 硬链接进测试 PATH 后点击“重新检测”，同一 app 恢复 ready。
+- [ ] 将恢复、Bun 子进程崩溃、非法协议、配置错误和进程树清理故障注入扩展到真实桌面 E2E。
+- [ ] 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止。
 - [ ] 完成 MVP 验收后，将临时文档沉淀为正式详细 `AGENTS.md`。
+
+### 阶段 6 当前验证记录
+
+- 新增 JSONL 单条完整坏记录恢复测试；合法的前后记录均保留，恢复后的 transcript 继续使用单调 seq，运行中 session 正确转为 interrupted。
+- 新增真实 Bun fault-injector 集成测试，验证 invalid JSON stdout 会终止子进程并稳定保留结构化协议错误；既有直接 kill 测试继续验证真正的意外退出为 crashed。
+- 新增 Rust command error 边界和桌面状态投影测试，覆盖 `config_invalid` 等后端错误代码跨 Tauri command 保留，以及 protocol error/crash 的 UI 分类。
+- production artifact smoke 使用四套隔离 XDG 父目录真实执行 bundled `main.js` 的 `initialize → shutdown`；`tauri build --no-bundle` 的 release 分支通过，NSIS 清单确认包含 10.8 MiB app 与 1.56 MiB `agent/main.js`。
+- NSIS `nyan-agent_0.1.0_x64-setup.exe` 为 2,644,393 bytes，SHA-256 `5E1EC52412739BF985C59B54E6C69CA4981D3208070029D440905E60810101FD`；隔离安装后观测到全局 Bun 以安装路径 artifact 为参数启动，关闭 app 后该子进程消失，uninstaller 返回 0，剩余空测试目录已清理。
+- E2E 新增第二次真实 app 启动：PATH 初始只有空测试 bin 与 System32，确认 unavailable；随后把当前 Bun 硬链接进同一 PATH 并点击重新检测，后端恢复 ready。两次 app 启动均使用临时 XDG 数据并在结束后清理。
+- 本轮通过 `bun run check`、protocol 7 项、agent 53 项、desktop 12 项、Rust 10 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为同一 spec 的正常恢复与 Bun 缺失→恢复两种真实 app 运行，production bundle 只有既有大 chunk 提示。
 
 ## 最近一轮没有做
 
-- 没有接入 CI E2E；当前稳定桌面 E2E 先作为本机 Windows 回归入口，CI runner 与发布 smoke test 留到阶段 6。
+- 没有接入 CI E2E；当前稳定桌面 E2E 仍是本机 Windows 回归入口。release/NSIS smoke 已在阶段 6 完成，CI runner 留待后续。
 - 没有实现 Windows Job Object；本阶段清理 Bun 直属进程，shell 子进程树在 shell 工具阶段实现。
 - 没有从参考仓库复制实现。
 

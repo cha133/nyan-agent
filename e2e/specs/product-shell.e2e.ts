@@ -1,10 +1,15 @@
-import { readFile } from "node:fs/promises";
+import { link, readFile } from "node:fs/promises";
+import { join } from "node:path";
 import { $, browser, expect } from "@wdio/globals";
 
 type PersistedState = { recentProjectId?: string | null };
 
 describe("nyan desktop product shell", () => {
   it("starts the real Tauri app and restores project context", async () => {
+    if (process.env.NYAN_E2E_MISSING_BUN === "1") {
+      await verifyMissingBunRecovery();
+      return;
+    }
     const shell = await $("main.product-shell");
     await shell.waitForDisplayed();
 
@@ -32,6 +37,23 @@ describe("nyan desktop product shell", () => {
     await expect($(".workspace-header p")).toHaveText(process.env.NYAN_E2E_PROJECT_NAME!);
   });
 });
+
+async function verifyMissingBunRecovery(): Promise<void> {
+  const unavailable = await $("main.centered-shell");
+  await unavailable.waitForDisplayed();
+  await expect($(".status-card h1")).toHaveText("未找到 Bun");
+  const initialStatus = await browser.tauri.execute(({ core }) => core.invoke("backend_status")) as { state: string };
+  expect(initialStatus.state).toBe("unavailable");
+
+  const source = process.env.NYAN_E2E_BUN_SOURCE!;
+  const target = join(process.env.NYAN_E2E_FAKE_BIN!, "bun.exe");
+  await link(source, target);
+  await $("button=重新检测").click();
+
+  await $("main.product-shell").waitForDisplayed();
+  const recoveredStatus = await browser.tauri.execute(({ core }) => core.invoke("backend_status")) as { state: string };
+  expect(recoveredStatus.state).toBe("ready");
+}
 
 async function waitForPersistedProject(expected: string | null): Promise<void> {
   await browser.waitUntil(async () => {

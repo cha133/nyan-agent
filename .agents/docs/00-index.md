@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 5 已完成；shell、edit、subagent 三个模型工具均已贯通 AI SDK、领域事件、JSONL 和桌面 transcript，下一步进入阶段 6 的恢复、崩溃、打包与安装验证。
+- 当前状态：阶段 5 已完成，阶段 6 进行中；首批恢复/故障语义、production artifact、NSIS 隔离安装运行及 Bun 缺失→重新检测 E2E 已完成，下一步扩展 crash/非法协议/配置错误桌面故障注入并做真实 provider 综合验收。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 
@@ -41,7 +41,7 @@
 - `nav`/页面重载会主动丢弃旧页面的 Tauri 异步 callback，紧邻重载出现 “Couldn't find callback id” warning 属于调试操作副作用；页面稳定后先 `console-clear`，再用 `console-watch` 复查，不能把旧 warning 当成应用运行时故障。
 - 结束时停止 `dev:inspect` 启动的父进程，确认 Tauri、Vite 与 Bun 子进程一起退出。不要用普通 `bun run dev` 代替本流程，否则不会生成可发现的 CDP 端点。
 - WebdriverIO Tauri Service 已使用 embedded provider 接入真实桌面 E2E；`bun run e2e` 通过测试专用 Tauri 配置构建并启动真实 WebView2，不需要外置 `tauri-driver`。Node 24 由仓库根 `mise.toml` 固定，首次运行前执行 `mise install`。
-- E2E 数据通过临时 XDG 父目录与真实用户配置隔离，测试结束后清理；WDIO 插件权限、global Tauri API 和前端 guest plugin 只进入 E2E 构建。当前 smoke flow 覆盖后端 ready、产品外壳、Tauri command bridge 和默认项目上下文的刷新恢复。
+- E2E 数据通过临时 XDG 父目录与真实用户配置隔离，测试结束后清理；WDIO 插件权限、global Tauri API 和前端 guest plugin 只进入 E2E 构建。当前 smoke flow 覆盖后端 ready、产品外壳、Tauri command bridge、默认项目上下文的刷新恢复，以及隔离 PATH 下的 Bun 缺失→运行中重新检测恢复。
 - `dev:inspect` + CDP 继续用于现场诊断；WebdriverIO 用于稳定回归，两者职责不变。
 
 ## 用户提供的参考材料

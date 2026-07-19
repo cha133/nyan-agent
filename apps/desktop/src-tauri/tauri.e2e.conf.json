@@ -1,6 +1,6 @@
 {
   "build": {
-    "beforeBuildCommand": "bun run build:e2e"
+    "beforeBuildCommand": "bun run build:agent && bun run build:e2e"
   },
   "app": {
     "withGlobalTauri": true,

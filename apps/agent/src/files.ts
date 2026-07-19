@@ -11,11 +11,15 @@ export async function readJsonFile<T>(path: string): Promise<T | undefined> {
 }
 
 export async function atomicWriteJson(path: string, value: unknown): Promise<void> {
+  await atomicWriteFile(path, `${JSON.stringify(value, null, 2)}\n`);
+}
+
+export async function atomicWriteFile(path: string, value: string | Uint8Array): Promise<void> {
   await mkdir(dirname(path), { recursive: true });
   const temporary = `${path}.${crypto.randomUUID()}.tmp`;
   const handle = await open(temporary, "wx", 0o600);
   try {
-    await handle.writeFile(`${JSON.stringify(value, null, 2)}\n`, "utf8");
+    await handle.writeFile(value);
     await handle.sync();
   } finally {
     await handle.close();

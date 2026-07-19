@@ -40,6 +40,30 @@ describe("session store", () => {
     expect((await readFile(transcript, "utf8")).endsWith("\n")).toBe(true);
   });
 
+  test("discards one corrupt complete record without losing later valid history", async () => {
+    const root = await mkdtemp(join(tmpdir(), "nyan-corrupt-record-"));
+    const { paths, store } = storeAt(root);
+    const session = await store.create("C:\\work", "provider/model");
+    const turnId = crypto.randomUUID() as TurnId;
+    await store.update(session.id, { status: "running", activeTurnId: turnId });
+    await store.append(session.id, "turn.started", {}, turnId);
+    const transcript = join(paths.sessionsDir, session.id as SessionId, "transcript.jsonl");
+    await appendFile(transcript, "{not valid json}\n");
+    await store.append(session.id, "assistant.block", { text: "still here" }, turnId);
+
+    const recovered = new SessionStore(paths, () => new Date("2026-01-02T00:00:00Z"));
+    await recovered.recover();
+
+    const records = await recovered.readTranscript(session.id);
+    expect(records.map((record) => record.kind)).toEqual([
+      "turn.started",
+      "assistant.block",
+      "turn.interrupted",
+    ]);
+    expect(records.map((record) => record.seq)).toEqual([0, 1, 2]);
+    expect(await readFile(transcript, "utf8")).not.toContain("not valid json");
+  });
+
   test("serializes concurrent metadata and transcript mutations", async () => {
     const root = await mkdtemp(join(tmpdir(), "nyan-concurrency-"));
     const { store } = storeAt(root);

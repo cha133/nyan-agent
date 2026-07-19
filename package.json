@@ -19,7 +19,7 @@
     "test": "bun run --filter '*' test && cargo test --manifest-path apps/desktop/src-tauri/Cargo.toml",
     "build": "bun run build:protocol && bun run build:agent && bun run build:desktop",
     "build:protocol": "bun run --cwd packages/protocol build",
-    "build:agent": "bun run --cwd apps/agent build",
+    "build:agent": "bun run --cwd apps/agent build && bun run scripts/smoke-agent-artifact.ts",
     "build:desktop": "bun run --cwd apps/desktop build",
     "tauri": "bun run --cwd apps/desktop tauri"
   },

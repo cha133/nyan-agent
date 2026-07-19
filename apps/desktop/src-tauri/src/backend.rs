@@ -3,11 +3,11 @@ use crate::{
     platform::{configure_no_window, detect_bun},
     protocol::{RequestId, ServerEnvelope, PROTOCOL_VERSION},
 };
-use serde::Serialize;
+use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
 use std::{
     collections::HashMap,
-    path::PathBuf,
+    path::{Path, PathBuf},
     process::Stdio,
     sync::{
         atomic::{AtomicU64, Ordering},
@@ -40,7 +40,35 @@ pub enum BackendStatus {
         exit_code: Option<i32>,
         message: String,
     },
+    ProtocolError {
+        error: ProtocolFailure,
+    },
     Stopped,
+}
+
+#[derive(Clone, Debug, Deserialize, Serialize)]
+pub struct ProtocolFailure {
+    code: String,
+    message: String,
+}
+
+#[derive(Clone, Debug, Serialize)]
+#[serde(rename_all = "camelCase")]
+pub struct BackendCommandError {
+    code: String,
+    message: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    details: Option<Value>,
+}
+
+impl From<String> for BackendCommandError {
+    fn from(message: String) -> Self {
+        Self {
+            code: "backend_transport_error".to_owned(),
+            message,
+            details: None,
+        }
+    }
 }
 
 enum ProcessControl {
@@ -201,12 +229,16 @@ impl BackendManager {
 
         match initialized {
             Ok(message) if message["type"] == "initialized" => {
-                self.set_status(BackendStatus::Ready {
-                    bun_path: runtime.executable.display().to_string(),
-                    bun_version: runtime.version,
-                })
-                .await;
-                Ok(())
+                let mut status = self.inner.status.write().await;
+                if matches!(*status, BackendStatus::Starting) {
+                    *status = BackendStatus::Ready {
+                        bun_path: runtime.executable.display().to_string(),
+                        bun_version: runtime.version,
+                    };
+                    Ok(())
+                } else {
+                    Err("Bun backend failed during initialization.".to_owned())
+                }
             }
             Ok(_) => {
                 let reason = "Bun backend returned an invalid initialize response.".to_owned();
@@ -225,29 +257,32 @@ impl BackendManager {
         self.start().await
     }
 
-    pub async fn list_projects(&self) -> Result<Value, String> {
+    pub async fn list_projects(&self) -> Result<Value, BackendCommandError> {
         self.command("project.list", json!({})).await
     }
 
-    pub async fn add_project(&self, path: String) -> Result<Value, String> {
+    pub async fn add_project(&self, path: String) -> Result<Value, BackendCommandError> {
         self.command("project.add", json!({ "path": path })).await
     }
 
-    pub async fn remove_project(&self, project_id: String) -> Result<Value, String> {
+    pub async fn remove_project(&self, project_id: String) -> Result<Value, BackendCommandError> {
         self.command("project.remove", json!({ "projectId": project_id }))
             .await
     }
 
-    pub async fn set_project_context(&self, project_id: Option<String>) -> Result<Value, String> {
+    pub async fn set_project_context(
+        &self,
+        project_id: Option<String>,
+    ) -> Result<Value, BackendCommandError> {
         self.command("project.context.set", json!({ "projectId": project_id }))
             .await
     }
 
-    pub async fn list_sessions(&self) -> Result<Value, String> {
+    pub async fn list_sessions(&self) -> Result<Value, BackendCommandError> {
         self.command("session.list", json!({})).await
     }
 
-    pub async fn list_models(&self, refresh: bool) -> Result<Value, String> {
+    pub async fn list_models(&self, refresh: bool) -> Result<Value, BackendCommandError> {
         self.command("model.list", json!({ "refresh": refresh }))
             .await
     }
@@ -256,7 +291,7 @@ impl BackendManager {
         &self,
         project_id: Option<String>,
         model: Option<String>,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, BackendCommandError> {
         let mut payload = json!({});
         if let Some(project_id) = project_id {
             payload["projectId"] = json!(project_id);
@@ -267,7 +302,7 @@ impl BackendManager {
         self.command("session.create", payload).await
     }
 
-    pub async fn load_session(&self, session_id: String) -> Result<Value, String> {
+    pub async fn load_session(&self, session_id: String) -> Result<Value, BackendCommandError> {
         self.command("session.load", json!({ "sessionId": session_id }))
             .await
     }
@@ -276,7 +311,7 @@ impl BackendManager {
         &self,
         session_id: String,
         model: String,
-    ) -> Result<Value, String> {
+    ) -> Result<Value, BackendCommandError> {
         self.command(
             "session.model.set",
             json!({ "sessionId": session_id, "model": model }),
@@ -284,14 +319,18 @@ impl BackendManager {
         .await
     }
 
-    pub async fn remove_session(&self, session_id: String) -> Result<Value, String> {
+    pub async fn remove_session(&self, session_id: String) -> Result<Value, BackendCommandError> {
         self.command("session.remove", json!({ "sessionId": session_id }))
             .await
     }
 
-    pub async fn submit_prompt(&self, session_id: String, prompt: String) -> Result<Value, String> {
+    pub async fn submit_prompt(
+        &self,
+        session_id: String,
+        prompt: String,
+    ) -> Result<Value, BackendCommandError> {
         if !matches!(self.status().await, BackendStatus::Ready { .. }) {
-            return Err("Bun backend is not ready.".to_owned());
+            return Err("Bun backend is not ready.".to_owned().into());
         }
         let prompt_request_id = RequestId::new();
         let response = self
@@ -310,9 +349,13 @@ impl BackendManager {
         Ok(response)
     }
 
-    async fn command(&self, message_type: &str, payload: Value) -> Result<Value, String> {
+    async fn command(
+        &self,
+        message_type: &str,
+        payload: Value,
+    ) -> Result<Value, BackendCommandError> {
         if !matches!(self.status().await, BackendStatus::Ready { .. }) {
-            return Err("Bun backend is not ready.".to_owned());
+            return Err("Bun backend is not ready.".to_owned().into());
         }
         let request_id = RequestId::new();
         let mut message = payload.as_object().cloned().unwrap_or_default();
@@ -324,7 +367,11 @@ impl BackendManager {
         Ok(response["result"].clone())
     }
 
-    pub async fn cancel_turn(&self, session_id: String, turn_id: String) -> Result<Value, String> {
+    pub async fn cancel_turn(
+        &self,
+        session_id: String,
+        turn_id: String,
+    ) -> Result<Value, BackendCommandError> {
         let request_id = RequestId::new();
         let response = self
             .request(
@@ -439,6 +486,11 @@ impl BackendManager {
                 envelope.message_type
             ));
         }
+        if envelope.message_type == "backend.error" {
+            let error = serde_json::from_value::<ProtocolFailure>(message["error"].clone())
+                .map_err(|error| format!("Invalid backend.error payload: {error}"))?;
+            self.record_protocol_failure(error).await;
+        }
         self.publish(message.clone()).await;
         if let Some(request_id) = envelope.request_id {
             if let Some(sender) = self.inner.pending.lock().await.remove(&request_id) {
@@ -460,12 +512,22 @@ impl BackendManager {
         if self.inner.generation.load(Ordering::SeqCst) != generation {
             return;
         }
+        let error = ProtocolFailure {
+            code: "protocol_error".to_owned(),
+            message: reason,
+        };
+        self.record_protocol_failure(error.clone()).await;
         self.publish(json!({
             "v": PROTOCOL_VERSION,
             "type": "backend.error",
-            "error": { "code": "protocol_error", "message": reason }
+            "error": error
         }))
         .await;
+    }
+
+    async fn record_protocol_failure(&self, error: ProtocolFailure) {
+        self.set_status(BackendStatus::ProtocolError { error })
+            .await;
         if let Some(control) = self.inner.control.lock().await.as_ref() {
             let _ = control.send(ProcessControl::Kill).await;
         }
@@ -479,7 +541,10 @@ impl BackendManager {
         *self.inner.control.lock().await = None;
         self.inner.pending.lock().await.clear();
         let previous = self.status().await;
-        if matches!(
+        if matches!(previous, BackendStatus::ProtocolError { .. }) {
+            // The supervisor intentionally killed a corrupt protocol stream.
+            // Preserve that structured cause instead of reporting a crash.
+        } else if matches!(
             previous,
             BackendStatus::Ready { .. } | BackendStatus::Starting
         ) {
@@ -513,9 +578,15 @@ pub fn development_agent_entry() -> PathBuf {
         .join("apps/agent/src/main.ts")
 }
 
+pub fn packaged_agent_entry(resource_dir: &Path) -> PathBuf {
+    resource_dir.join("agent").join("main.js")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+    use std::fs;
+    use uuid::Uuid;
 
     #[tokio::test]
     async fn bun_backend_initializes_and_stops_cleanly() {
@@ -557,15 +628,110 @@ mod tests {
         .unwrap();
         assert!(manager.inner.writer.lock().await.is_none());
     }
+
+    #[tokio::test]
+    async fn invalid_backend_ndjson_remains_a_structured_protocol_error() {
+        let script =
+            std::env::temp_dir().join(format!("nyan-invalid-protocol-{}.js", Uuid::new_v4()));
+        fs::write(
+            &script,
+            r#"
+let input = "";
+for await (const chunk of Bun.stdin.stream()) {
+  input += new TextDecoder().decode(chunk);
+  const newline = input.indexOf("\n");
+  if (newline < 0) continue;
+  const request = JSON.parse(input.slice(0, newline));
+  process.stdout.write(JSON.stringify({
+    v: 1,
+    type: "initialized",
+    requestId: request.requestId,
+    backend: { name: "fault-injector", version: "0", bunVersion: Bun.version }
+  }) + "\n");
+  process.stdout.write("{invalid json}\n");
+  await Bun.sleep(10_000);
+}
+"#,
+        )
+        .unwrap();
+
+        let manager = BackendManager::new(script.clone());
+        let _ = manager.start().await;
+        timeout(Duration::from_secs(2), async {
+            loop {
+                if matches!(manager.status().await, BackendStatus::ProtocolError { .. }) {
+                    break;
+                }
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+
+        match manager.status().await {
+            BackendStatus::ProtocolError { error } => {
+                assert_eq!(error.code, "protocol_error");
+                assert!(error.message.contains("invalid_json"));
+            }
+            status => panic!("expected protocol error, got {status:?}"),
+        }
+        timeout(Duration::from_secs(2), async {
+            while manager.inner.writer.lock().await.is_some() {
+                tokio::time::sleep(Duration::from_millis(10)).await;
+            }
+        })
+        .await
+        .unwrap();
+        assert!(matches!(
+            manager.status().await,
+            BackendStatus::ProtocolError { .. }
+        ));
+        let _ = fs::remove_file(script);
+    }
+
+    #[test]
+    fn rejected_commands_preserve_backend_error_codes() {
+        let error = ensure_ok(&json!({
+            "v": 1,
+            "type": "response",
+            "ok": false,
+            "error": {
+                "code": "config_invalid",
+                "message": "default_model is missing",
+                "details": { "field": "default_model" }
+            }
+        }))
+        .unwrap_err();
+
+        assert_eq!(error.code, "config_invalid");
+        assert_eq!(error.message, "default_model is missing");
+        assert_eq!(error.details, Some(json!({ "field": "default_model" })));
+    }
+
+    #[test]
+    fn packaged_agent_uses_the_tauri_resource_layout() {
+        assert_eq!(
+            packaged_agent_entry(Path::new("C:\\Program Files\\nyan-agent")),
+            PathBuf::from("C:\\Program Files\\nyan-agent\\agent\\main.js")
+        );
+    }
 }
 
-fn ensure_ok(response: &Value) -> Result<(), String> {
+fn ensure_ok(response: &Value) -> Result<(), BackendCommandError> {
     if response["ok"] == true {
         return Ok(());
     }
-    Err(response
-        .pointer("/error/message")
-        .and_then(Value::as_str)
-        .unwrap_or("The backend rejected the request.")
-        .to_owned())
+    Err(BackendCommandError {
+        code: response
+            .pointer("/error/code")
+            .and_then(Value::as_str)
+            .unwrap_or("backend_command_failed")
+            .to_owned(),
+        message: response
+            .pointer("/error/message")
+            .and_then(Value::as_str)
+            .unwrap_or("The backend rejected the request.")
+            .to_owned(),
+        details: response.pointer("/error/details").cloned(),
+    })
 }
