@@ -25,4 +25,16 @@ describe("desktop transcript", () => {
       text: "edit · updated\nsrc/app.ts\n\n-old\n+new",
     });
   });
+
+  test("restores only the latest one-line activity for each subagent", () => {
+    const records = [
+      { seq: 0, createdAt: "2026-01-01", kind: "subagent.activity", payload: { subagentId: "agent-1", taskId: "inspect", status: "running", kind: "tool", preview: "rg files" } },
+      { seq: 1, createdAt: "2026-01-01", kind: "subagent.activity", payload: { subagentId: "agent-2", taskId: "tests", status: "running", kind: "reasoning", preview: "checking" } },
+      { seq: 2, createdAt: "2026-01-01", kind: "subagent.activity", payload: { subagentId: "agent-1", taskId: "inspect", status: "completed", kind: "text", preview: "found the cause" } },
+    ];
+    expect(toTranscriptItems(records)).toEqual([
+      { id: "agent-1", role: "subagent", text: "inspect · 已完成 · 输出\nfound the cause" },
+      { id: "agent-2", role: "subagent", text: "tests · 运行中 · 思考\nchecking" },
+    ]);
+  });
 });

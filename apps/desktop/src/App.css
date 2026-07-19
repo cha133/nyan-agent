@@ -54,7 +54,9 @@ button:focus-visible { outline: 2px solid var(--focus); outline-offset: 2px; }
 .message-user { width: fit-content; max-width: min(680px, 84%); margin-right: 0; border-radius: 16px 16px 4px 16px; background: var(--ctp-mantle); padding: 11px 15px; }
 .message-status { border-left: 2px solid var(--ctp-mauve); color: var(--muted); padding-left: 12px; font-size: 13px; }
 .message-tool { color: var(--ctp-subtext-1); font-size: 12px; }
-.message-tool pre { overflow-x: auto; max-height: 320px; margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--ctp-mantle); padding: 12px; font-family: "Cascadia Code", Consolas, monospace; line-height: 1.55; white-space: pre-wrap; }
+.message-tool pre, .message-subagent pre { overflow-x: auto; max-height: 320px; margin: 0; border: 1px solid var(--line); border-radius: 10px; background: var(--ctp-mantle); padding: 12px; font-family: "Cascadia Code", Consolas, monospace; line-height: 1.55; white-space: pre-wrap; }
+.message-subagent { color: var(--ctp-subtext-1); font-size: 12px; }
+.message-subagent pre { border-left: 3px solid var(--ctp-mauve); }
 .message-assistant pre { overflow-x: auto; border: 1px solid var(--line); border-radius: 10px; background: var(--ctp-mantle); padding: 13px; }
 .message-assistant code { font-family: "Cascadia Code", Consolas, monospace; font-size: .9em; }
 .streaming { color: var(--ctp-subtext-1); white-space: pre-wrap; }

@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 5 进行中；shell 与 edit 两个模型工具已贯通 AI SDK、领域事件、JSONL 和桌面 transcript，edit 已覆盖换行规范化、五种匹配策略、唯一性、跨度保护与原子写，下一项是 subagent。
+- 当前状态：阶段 5 已完成；shell、edit、subagent 三个模型工具均已贯通 AI SDK、领域事件、JSONL 和桌面 transcript，下一步进入阶段 6 的恢复、崩溃、打包与安装验证。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 

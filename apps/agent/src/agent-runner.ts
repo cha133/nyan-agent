@@ -1,5 +1,5 @@
 import { generateText, isStepCount, jsonSchema, tool, ToolLoopAgent, type LanguageModel, type ModelMessage } from "ai";
-import type { ToolExecutionId } from "@nyan/protocol";
+import type { SubagentId, ToolExecutionId } from "@nyan/protocol";
 import { EditManager, type EditInput } from "./edit";
 import { ShellManager, type ShellInput } from "./shell";
 
@@ -10,9 +10,19 @@ export type RunnerEvent =
   | { type: "reasoning.completed"; text: string }
   | { type: "tool.started"; toolExecutionId: ToolExecutionId; toolName: string; input: unknown }
   | { type: "tool.output"; toolExecutionId: ToolExecutionId; preview: string }
-  | { type: "tool.completed"; toolExecutionId: ToolExecutionId; output: unknown };
+  | { type: "tool.completed"; toolExecutionId: ToolExecutionId; output: unknown }
+  | { type: "subagent.activity"; subagentId: SubagentId; taskId: string; status: SubagentStatus; kind: SubagentActivityKind; preview: string };
 
 export type RunResult = { status: "completed" | "cancelled"; responseMessages: ModelMessage[] };
+
+type SubagentActivityKind = "reasoning" | "tool" | "text";
+type SubagentStatus = "running" | "completed" | "failed" | "cancelled";
+type SubagentInput = { tasks: Array<{ id: string; prompt: string }> };
+type SubagentResult = { id: string; status: "completed"; text: string } | { id: string; status: "failed"; error: string };
+
+const SUBAGENT_CONCURRENCY = 3;
+const SUBAGENT_STEP_LIMIT = 30;
+const SUBAGENT_RESULT_BYTES = 64 * 1024;
 
 export class AgentRunner {
   constructor(private readonly model: LanguageModel, private readonly maxOutputTokens?: number) {}
@@ -26,51 +36,46 @@ export class AgentRunner {
     const shell = new ShellManager();
     const edit = new EditManager();
     const toolExecutions = new Map<string, ToolExecutionId>();
+    const workerTools = createWorkerTools(shell, edit, options.cwd);
     const tools = {
-      shell: tool({
-        description: "Run PowerShell 7 on Windows. Start with command, or continue a running command with processId and action poll/write/kill. Output is UTF-8 and byte-truncated.",
-        inputSchema: jsonSchema<ShellInput>({
+      ...workerTools,
+      subagent: tool({
+        description: "Delegate 1 to 3 independent tasks to parallel subagents. Each subagent has an isolated context and can use shell and edit, but cannot delegate again. The call blocks until every task settles.",
+        inputSchema: jsonSchema<SubagentInput>({
           type: "object",
           additionalProperties: false,
+          required: ["tasks"],
           properties: {
-            command: { type: "string", description: "PowerShell 7 command to start." },
-            cwd: { type: "string", description: "Optional absolute working directory. Defaults to the task cwd." },
-            timeoutMs: { type: "integer", minimum: 1, maximum: 86_400_000 },
-            yieldTimeMs: { type: "integer", minimum: 0, maximum: 30_000 },
-            maxOutputBytes: { type: "integer", minimum: 1024, maximum: 16_777_216 },
-            processId: { type: "string", description: "Opaque ID returned by a previous running shell call." },
-            action: { type: "string", enum: ["poll", "write", "kill"] },
-            stdin: { type: "string", description: "UTF-8 text to write to a running process." },
-            closeStdin: { type: "boolean" },
+            tasks: {
+              type: "array",
+              minItems: 1,
+              maxItems: 3,
+              items: {
+                type: "object",
+                additionalProperties: false,
+                required: ["id", "prompt"],
+                properties: {
+                  id: { type: "string", minLength: 1, maxLength: 80, description: "A unique caller-chosen task label." },
+                  prompt: { type: "string", minLength: 1, description: "A self-contained task with scope, whether edits are allowed, and the expected result." },
+                },
+              },
+            },
           },
         }),
-        execute: async (input, { abortSignal }) => shell.execute(input, {
+        execute: async (input, { abortSignal }) => runSubagents({
+          input,
+          model: this.model,
+          maxOutputTokens: this.maxOutputTokens,
           cwd: options.cwd,
+          tools: workerTools,
           abortSignal,
-        }),
-      }),
-      edit: tool({
-        description: "Create a UTF-8 text file or replace oldText with newText in one file. Uses safe fuzzy whitespace fallbacks, requires a unique match by default, preserves BOM and line endings, and writes atomically.",
-        inputSchema: jsonSchema<EditInput>({
-          type: "object",
-          additionalProperties: false,
-          required: ["filePath", "oldText", "newText"],
-          properties: {
-            filePath: { type: "string", description: "Absolute path or path relative to the task cwd." },
-            oldText: { type: "string", description: "Text to replace. Use an empty string only when creating a file that does not exist." },
-            newText: { type: "string", description: "Replacement text or the complete content of a newly created file." },
-            replaceAll: { type: "boolean", description: "Replace every match. Defaults to false; fuzzy block-anchor matching always requires one unique candidate." },
-          },
-        }),
-        execute: async (input, { abortSignal }) => edit.execute(input, {
-          cwd: options.cwd,
-          abortSignal,
+          onEvent: options.onEvent,
         }),
       }),
     };
     const agent = new ToolLoopAgent({
       model: this.model,
-      instructions: shellInstructions(options.cwd),
+      instructions: mainInstructions(options.cwd),
       tools,
       stopWhen: isStepCount(50),
       maxOutputTokens: this.maxOutputTokens,
@@ -145,14 +150,162 @@ export class AgentRunner {
   }
 }
 
-function shellInstructions(cwd: string): string {
+function createWorkerTools(shell: ShellManager, edit: EditManager, cwd: string) {
+  return {
+    shell: tool({
+      description: "Run PowerShell 7 on Windows. Start with command, or continue a running command with processId and action poll/write/kill. Output is UTF-8 and byte-truncated.",
+      inputSchema: jsonSchema<ShellInput>({
+        type: "object",
+        additionalProperties: false,
+        properties: {
+          command: { type: "string", description: "PowerShell 7 command to start." },
+          cwd: { type: "string", description: "Optional absolute working directory. Defaults to the task cwd." },
+          timeoutMs: { type: "integer", minimum: 1, maximum: 86_400_000 },
+          yieldTimeMs: { type: "integer", minimum: 0, maximum: 30_000 },
+          maxOutputBytes: { type: "integer", minimum: 1024, maximum: 16_777_216 },
+          processId: { type: "string", description: "Opaque ID returned by a previous running shell call." },
+          action: { type: "string", enum: ["poll", "write", "kill"] },
+          stdin: { type: "string", description: "UTF-8 text to write to a running process." },
+          closeStdin: { type: "boolean" },
+        },
+      }),
+      execute: async (input, { abortSignal }) => shell.execute(input, { cwd, abortSignal }),
+    }),
+    edit: tool({
+      description: "Create a UTF-8 text file or replace oldText with newText in one file. Uses safe fuzzy whitespace fallbacks, requires a unique match by default, preserves BOM and line endings, and writes atomically.",
+      inputSchema: jsonSchema<EditInput>({
+        type: "object",
+        additionalProperties: false,
+        required: ["filePath", "oldText", "newText"],
+        properties: {
+          filePath: { type: "string", description: "Absolute path or path relative to the task cwd." },
+          oldText: { type: "string", description: "Text to replace. Use an empty string only when creating a file that does not exist." },
+          newText: { type: "string", description: "Replacement text or the complete content of a newly created file." },
+          replaceAll: { type: "boolean", description: "Replace every match. Defaults to false; fuzzy block-anchor matching always requires one unique candidate." },
+        },
+      }),
+      execute: async (input, { abortSignal }) => edit.execute(input, { cwd, abortSignal }),
+    }),
+  };
+}
+
+async function runSubagents(options: {
+  input: SubagentInput;
+  model: LanguageModel;
+  maxOutputTokens?: number;
+  cwd: string;
+  tools: ReturnType<typeof createWorkerTools>;
+  abortSignal?: AbortSignal;
+  onEvent: (event: RunnerEvent) => void | Promise<void>;
+}): Promise<{ tasks: SubagentResult[] }> {
+  const ids = new Set<string>();
+  for (const task of options.input.tasks) {
+    if (!task.id.trim() || !task.prompt.trim()) throw new Error("subagent_invalid_task: Task id and prompt must not be empty");
+    if (ids.has(task.id)) throw new Error("subagent_duplicate_task_id: Subagent task ids must be unique");
+    ids.add(task.id);
+  }
+
+  const settled = await mapWithConcurrency(options.input.tasks, SUBAGENT_CONCURRENCY, async (task) => {
+    const subagentId = crypto.randomUUID() as SubagentId;
+    let latest = activityPreview(task.prompt);
+    const activity = async (status: SubagentStatus, kind: SubagentActivityKind, preview = latest) => {
+      latest = activityPreview(preview) || latest;
+      await options.onEvent({ type: "subagent.activity", subagentId, taskId: task.id, status, kind, preview: latest });
+    };
+    await activity("running", "text");
+
+    const agent = new ToolLoopAgent({
+      model: options.model,
+      instructions: subagentInstructions(options.cwd),
+      tools: options.tools,
+      stopWhen: isStepCount(SUBAGENT_STEP_LIMIT),
+      maxOutputTokens: options.maxOutputTokens,
+    });
+
+    try {
+      const result = await agent.stream({
+        prompt: task.prompt,
+        abortSignal: options.abortSignal,
+        onToolExecutionStart: async ({ toolCall }) => activity("running", "tool", `${toolCall.toolName}: ${previewOutput(toolCall.input)}`),
+      });
+      const text = new Map<string, string>();
+      const reasoning = new Map<string, string>();
+      for await (const part of result.fullStream) {
+        if (part.type === "text-start") text.set(part.id, "");
+        else if (part.type === "text-delta") {
+          const current = `${text.get(part.id) ?? ""}${part.text}`;
+          text.set(part.id, current);
+          await activity("running", "text", current);
+        } else if (part.type === "reasoning-start") reasoning.set(part.id, "");
+        else if (part.type === "reasoning-delta") {
+          const current = `${reasoning.get(part.id) ?? ""}${part.text}`;
+          reasoning.set(part.id, current);
+          await activity("running", "reasoning", current);
+        } else if (part.type === "error") throw part.error;
+      }
+      const finalText = truncateUtf8(await result.text, SUBAGENT_RESULT_BYTES);
+      await activity("completed", "text");
+      return { id: task.id, status: "completed", text: finalText } satisfies SubagentResult;
+    } catch (error) {
+      const cancelled = Boolean(options.abortSignal?.aborted);
+      await activity(cancelled ? "cancelled" : "failed", "text", cancelled ? latest : publicToolError(error));
+      throw error;
+    }
+  });
+
+  if (options.abortSignal?.aborted) throw options.abortSignal.reason ?? new DOMException("Cancelled", "AbortError");
+  return {
+    tasks: settled.map((result, index) => result.status === "fulfilled"
+      ? result.value
+      : { id: options.input.tasks[index].id, status: "failed", error: publicToolError(result.reason) }),
+  };
+}
+
+async function mapWithConcurrency<Input, Output>(items: Input[], limit: number, worker: (item: Input) => Promise<Output>): Promise<PromiseSettledResult<Output>[]> {
+  const results = new Array<PromiseSettledResult<Output>>(items.length);
+  let next = 0;
+  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
+    while (next < items.length) {
+      const index = next++;
+      try {
+        results[index] = { status: "fulfilled", value: await worker(items[index]) };
+      } catch (reason) {
+        results[index] = { status: "rejected", reason };
+      }
+    }
+  }));
+  return results;
+}
+
+function mainInstructions(cwd: string): string {
   return `You are Nyan, a coding agent working in ${cwd}. Be concise and accurate.
 
 Use the shell tool for reading, searching, builds, tests, and process work. It runs PowerShell 7 with the task directory as its default cwd. Prefer rg for text and file searches. Poll a returned processId when status is running; use write only when a process needs stdin, and kill processes you no longer need.
 
 Use the edit tool for precise changes to one UTF-8 text file. Include enough unchanged surrounding context in oldText to make the match unique. Set replaceAll only when every occurrence should change. To create a new file, use empty oldText; never use empty oldText to overwrite an existing file. Read a file again after a rejected match instead of guessing a broader replacement.
 
+Use the subagent tool only for independent tasks that benefit from parallel work or isolated context. Give every task a unique short id and a self-contained prompt that states its scope, expected result, and whether file changes are allowed. Do not assign multiple writing tasks to the same file. A request to explore without modifying files must be written explicitly in the task prompt.
+
 You have full filesystem access, so handle irreversible operations carefully. Use -LiteralPath for filesystem mutations. Before recursive deletion or moving, resolve and verify the exact absolute targets. Never recursively delete a workspace root, user home, or another broad path. Do not build destructive commands by passing paths between different shells.`;
+}
+
+function subagentInstructions(cwd: string): string {
+  return `You are a Nyan subagent working independently in ${cwd}. Complete only the delegated task. You may use shell and edit, and you cannot delegate further. Respect the task's modification boundary exactly. Use PowerShell 7 and prefer rg for searches. When finished, return a concise, self-contained summary with findings, changes, verification, and any remaining risk. You have full filesystem access, so handle irreversible operations carefully.`;
+}
+
+function activityPreview(value: string): string {
+  const compact = value.replace(/\s+/g, " ").trim();
+  return compact.length > 240 ? `…${compact.slice(-239)}` : compact;
+}
+
+function truncateUtf8(value: string, maxBytes: number): string {
+  const bytes = Buffer.from(value, "utf8");
+  if (bytes.length <= maxBytes) return value;
+  const marker = Buffer.from(`\n... omitted ${bytes.length - maxBytes} bytes ...\n`, "utf8");
+  const budget = Math.max(0, maxBytes - marker.length);
+  const head = bytes.subarray(0, Math.ceil(budget / 2)).toString("utf8").replace(/\uFFFD$/u, "");
+  const tail = bytes.subarray(bytes.length - Math.floor(budget / 2)).toString("utf8").replace(/^\uFFFD+/u, "");
+  return `${head}${marker.toString("utf8")}${tail}`;
 }
 
 function previewOutput(output: unknown): string {

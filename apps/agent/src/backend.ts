@@ -211,6 +211,7 @@ export class AgentBackend {
           .catch(() => {});
       }
 
+      const subagentsStarted = new Set<string>();
       const result = await runner.run({
         cwd: session.cwd,
         messages,
@@ -230,6 +231,13 @@ export class AgentBackend {
             await send({ type: "tool.started", ...payload });
           } else if (event.type === "tool.output") {
             await send({ type: "tool.output", toolExecutionId: event.toolExecutionId, preview: event.preview });
+          } else if (event.type === "subagent.activity") {
+            const payload = { subagentId: event.subagentId, taskId: event.taskId, status: event.status, kind: event.kind, preview: event.preview };
+            if (event.status !== "running" || !subagentsStarted.has(event.subagentId)) {
+              await this.store.append(sessionId, "subagent.activity", payload, turnId);
+              subagentsStarted.add(event.subagentId);
+            }
+            await send({ type: "subagent.activity", ...payload });
           } else {
             const payload = { toolExecutionId: event.toolExecutionId, output: event.output };
             await this.store.append(sessionId, "tool.completed", payload, turnId);

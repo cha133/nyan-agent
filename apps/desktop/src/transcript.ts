@@ -1,11 +1,12 @@
 export type TranscriptRecord = { seq: number; createdAt: string; turnId?: string; kind: string; payload: unknown };
-export type TranscriptItem = { id: string; role: "user" | "assistant" | "status" | "tool"; text: string };
+export type TranscriptItem = { id: string; role: "user" | "assistant" | "status" | "tool" | "subagent"; text: string };
 
 export function toTranscriptItems(records: TranscriptRecord[]): TranscriptItem[] {
   const items: TranscriptItem[] = [];
   const toolIndexes = new Map<string, number>();
+  const subagentIndexes = new Map<string, number>();
   for (const record of records) {
-    const payload = record.payload as { itemId?: string; text?: string; toolExecutionId?: string; toolName?: string; input?: unknown; output?: unknown } | undefined;
+    const payload = record.payload as { itemId?: string; text?: string; toolExecutionId?: string; toolName?: string; input?: unknown; output?: unknown; subagentId?: string; taskId?: string; status?: SubagentStatus; kind?: SubagentKind; preview?: string } | undefined;
     if (record.kind === "user.message" && payload?.text) items.push({ id: payload.itemId ?? `record-${record.seq}`, role: "user", text: payload.text });
     else if (record.kind === "assistant.block" && payload?.text) items.push({ id: payload.itemId ?? `record-${record.seq}`, role: "assistant", text: payload.text });
     else if (record.kind === "turn.interrupted") items.push({ id: `record-${record.seq}`, role: "status", text: "上次运行因后端重启而中断。" });
@@ -15,6 +16,13 @@ export function toTranscriptItems(records: TranscriptRecord[]): TranscriptItem[]
     } else if (record.kind === "tool.completed" && payload?.toolExecutionId) {
       const index = toolIndexes.get(payload.toolExecutionId);
       if (index !== undefined) items[index] = { ...items[index], text: formatToolCompletion(toolHeading(items[index].text), payload.output) };
+    } else if (record.kind === "subagent.activity" && payload?.subagentId && payload.taskId && payload.status && payload.kind && typeof payload.preview === "string") {
+      const item = { id: payload.subagentId, role: "subagent" as const, text: formatSubagentActivity(payload.taskId, payload.status, payload.kind, payload.preview) };
+      const index = subagentIndexes.get(payload.subagentId);
+      if (index === undefined) {
+        subagentIndexes.set(payload.subagentId, items.length);
+        items.push(item);
+      } else items[index] = item;
     }
   }
   return items;
@@ -22,6 +30,22 @@ export function toTranscriptItems(records: TranscriptRecord[]): TranscriptItem[]
 
 export function updateToolItem(items: TranscriptItem[], id: string, update: (text: string) => string): TranscriptItem[] {
   return items.map((item) => item.id === id ? { ...item, text: update(item.text) } : item);
+}
+
+type SubagentStatus = "running" | "completed" | "failed" | "cancelled";
+type SubagentKind = "reasoning" | "tool" | "text";
+
+export function updateSubagentItem(items: TranscriptItem[], subagentId: string, taskId: string, status: SubagentStatus, kind: SubagentKind, preview: string): TranscriptItem[] {
+  const item = { id: subagentId, role: "subagent" as const, text: formatSubagentActivity(taskId, status, kind, preview) };
+  return items.some((current) => current.id === subagentId)
+    ? items.map((current) => current.id === subagentId ? item : current)
+    : [...items, item];
+}
+
+export function formatSubagentActivity(taskId: string, status: SubagentStatus, kind: SubagentKind, preview: string): string {
+  const statusLabel = ({ running: "运行中", completed: "已完成", failed: "失败", cancelled: "已停止" } as const)[status];
+  const kindLabel = ({ reasoning: "思考", tool: "工具", text: "输出" } as const)[kind];
+  return `${taskId} · ${statusLabel} · ${kindLabel}${preview ? `\n${preview}` : ""}`;
 }
 
 export function toolHeading(text: string): string {

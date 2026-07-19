@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelMessage } from "ai";
-import type { ProjectId, RequestId, ServerMessage, SessionId, ToolExecutionId, TurnId } from "@nyan/protocol";
+import type { ProjectId, RequestId, ServerMessage, SessionId, SubagentId, ToolExecutionId, TurnId } from "@nyan/protocol";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -105,6 +105,32 @@ describe("agent backend", () => {
     const transcript = (loaded.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { transcript: Array<{ kind: string }> } }).result.transcript;
     expect(transcript.map((record) => record.kind)).toContain("tool.started");
     expect(transcript.map((record) => record.kind)).toContain("tool.completed");
+  });
+
+  test("streams subagent activity but persists only start and terminal snapshots", async () => {
+    const subagentId = crypto.randomUUID() as SubagentId;
+    const runner = {
+      async run(options: { onEvent: (event: RunnerEvent) => void | Promise<void> }) {
+        await options.onEvent({ type: "subagent.activity", subagentId, taskId: "inspect", status: "running", kind: "text", preview: "starting" });
+        await options.onEvent({ type: "subagent.activity", subagentId, taskId: "inspect", status: "running", kind: "tool", preview: "rg files" });
+        await options.onEvent({ type: "subagent.activity", subagentId, taskId: "inspect", status: "completed", kind: "text", preview: "done" });
+        return { status: "completed" as const, responseMessages: [] };
+      },
+      async title() { return "Subagent task"; },
+    };
+    const { backend, events } = await createBackend(runner);
+    const sessionId = await createSession(backend);
+    const submitted = await backend.handle({ v: 1, type: "prompt.submit", requestId: requestId(), sessionId, prompt: "delegate" });
+    submitted.start?.();
+    await waitFor(() => events.some((event) => event.type === "turn.completed"));
+
+    expect(events.filter((event) => event.type === "subagent.activity")).toHaveLength(3);
+    const loaded = await backend.handle({ v: 1, type: "session.load", requestId: requestId(), sessionId });
+    const transcript = (loaded.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { transcript: Array<{ kind: string; payload: unknown }> } }).result.transcript;
+    expect(transcript.filter((record) => record.kind === "subagent.activity")).toEqual([
+      expect.objectContaining({ payload: expect.objectContaining({ status: "running", preview: "starting" }) }),
+      expect.objectContaining({ payload: expect.objectContaining({ status: "completed", preview: "done" }) }),
+    ]);
   });
 
   test("rejects an unknown session", async () => {

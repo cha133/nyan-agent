@@ -75,10 +75,11 @@
 - `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
 - 该阶段最初未使用真实凭据；2026-07-19 已在后续阶段用本机隔离配置完成 Anthropic-compatible 真实流式请求，详见阶段 4 验证记录。
 
-## 下一步：阶段 5 — 三个工具
+## 下一步：阶段 6 — 稳定与发布
 
-- 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
-- 用真实 provider 在桌面端验收 shell/edit 工具调用、长进程轮询与停止；自动化底层覆盖已完成。
+- 补齐端到端恢复、子进程崩溃、非法协议、配置错误和进程树清理测试。
+- 验证 agent artifact 打包、全新机器 Bun 检测及 Win11 安装包。
+- 用真实 provider 在桌面端综合验收 shell/edit/subagent、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 进行中：阶段 4 — 产品外壳
 
@@ -141,7 +142,7 @@
 - [x] 确定 shell 启动折中：默认加载 Profile，设置 `TERM=dumb` + `NYAN_AGENT=1` 跳过交互增强，并保留 `-NonInteractive` 防止提示挂起；不使用 `-NoProfile`。
 - [x] 实现 shell：PowerShell UTF-8 包装、合并输出、字节截断、长进程、超时和取消。
 - [x] 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
-- [ ] 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
+- [x] 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
 
 ### 阶段 5 当前验证记录
 
@@ -154,7 +155,12 @@
 - edit 对模糊候选执行行数与字符跨度比例保护；已有文件拒绝空 `oldText`，不存在文件仅允许空 `oldText` 创建，拒绝目录、非 UTF-8、无变化和提前取消。每文件 mutex 覆盖读/匹配/写全过程，同目录临时文件经 flush 后原子 rename，保留 UTF-8 BOM、原换行风格与文件 mode。
 - edit 返回实际匹配策略、替换次数、增删行统计和有上限的 diff；AI SDK 注册、独立 nyan tool ID、JSONL 工具记录以及桌面实时/恢复 diff 卡片复用现有通用工具链路。
 - 新增 15 项 edit runtime 测试和 agent/desktop 集成回归，覆盖五种实际 matcher、CRLF/BOM、新建、`replaceAll`、重叠候选、跨度保护、并发串行、无写入失败路径和真实 AI SDK 工具执行。
-- 本轮重新通过 `bun run check`、protocol 7 项、agent 48 项、desktop 9 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为 1 个 spec、1 个测试，production bundle 仍只有既有大 chunk 提示。
+- subagent 工具一次接受 1–3 个带唯一任务 ID 的独立任务，执行层以并发上限 3 调度并等待全部 settle；单项失败保留其他成功结果，每项最终文本按 64 KiB UTF-8 字节上限返回主模型。
+- 每个 subagent 使用同一模型与独立上下文，只注入共享的 shell/edit 工具实例而不注入 subagent；共享 edit manager 保持跨主/子 agent 的每文件 mutex，父 AbortSignal 同时传入子模型与 shell 进程。
+- 主提示词要求委派任务写清范围、预期结果和是否允许修改，并禁止多个写任务修改同一文件；子 agent 有独立 30-step 上限和总结约束。
+- `subagent.activity` 现携带 subagent/task ID、运行状态、活动类型和截断 preview；桌面实时覆盖每个 subagent 的单行卡片，JSONL 仅保存开始与终态快照，恢复时折叠为同一项，不展开详细过程或单列最终摘要。
+- 新增 agent/backend/desktop 回归，覆盖三个任务真实并发、阻塞结果聚合、兄弟任务部分失败、父级取消传播、活动事件首末快照持久化与桌面单行恢复。
+- 本轮重新通过 `bun run check`、protocol 7 项、agent 52 项、desktop 10 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为 1 个 spec、1 个测试，production bundle 仍只有既有大 chunk 提示。
 
 ### 阶段 6 — 稳定与发布
 

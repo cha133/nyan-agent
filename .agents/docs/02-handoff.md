@@ -1,20 +1,20 @@
 # 跨会话交接
 
-状态：2026-07-19。阶段 1–4 已形成可运行垂直切片；阶段 5 的 shell 与 edit 已完成并贯通 AI SDK、领域事件、JSONL 和桌面 transcript，下一主线是 subagent。真实 provider 的底层流式请求已经验证，真实桌面 shell/edit 完整回合仍待验收。
+状态：2026-07-19。阶段 1–5 已完成可运行垂直切片；shell、edit、subagent 三个模型工具均已贯通 AI SDK、领域事件、JSONL 和桌面 transcript。下一主线是阶段 6 的恢复、崩溃、非法协议、打包与安装验证。真实 provider 的底层流式请求已经验证，真实桌面三个工具的综合回合仍待验收。
 
 ## 新会话目标
 
-继续 [01-state.md](01-state.md) 的阶段 5，不需要重新讨论已审批的 [03-product.md](03-product.md) 和 [04-technical-plan.md](04-technical-plan.md)：
+继续 [01-state.md](01-state.md) 的阶段 6，不需要重新讨论已审批的 [03-product.md](03-product.md) 和 [04-technical-plan.md](04-technical-plan.md)：
 
-1. 实现 subagent 阻塞工具：一次接受 1–3 个独立任务，并发上限 3，同模型、独立上下文，只提供 shell/edit，不允许递归 subagent。
-2. 将父 turn 的 AbortSignal 传给所有 subagent；停止主 turn 时级联停止子 agent 和它们启动的 PowerShell 进程树，使用 `Promise.allSettled` 保留部分成功结果。
-3. 接入 `subagent.activity`：每个子任务在 UI 只保留状态和一行最新 reasoning/tool/text 活动，详细过程不展开，最终结果只作为 tool result 返回主模型。
-4. 如本机真实模型配置可用，用真实桌面回合验收 shell/edit、长进程轮询和停止；自动化测试不得读取真实密钥。
+1. 补齐端到端恢复、Bun 子进程崩溃、非法协议、配置错误和 shell 进程树清理测试，确保 UI 展示结构化故障而不是解析字符串。
+2. 验证 production agent artifact 的资源打包与启动路径，并做全新环境 Bun 缺失/重新检测体验和 Win11 安装包 smoke test。
+3. 如本机真实模型配置可用，用真实桌面回合综合验收 shell/edit/subagent、长进程轮询和停止；自动化测试不得读取真实密钥。
+4. MVP 验收完成后，把临时 `.agents/docs` 中仍有效的约束沉淀为正式详细 `AGENTS.md`。
 
 ## 仓库现场
 
 - 工作区：`C:\Dev\nyan-agent`；分支：`main`，跟踪 `origin/main`。
-- 最近功能提交：`64c5437 feat: add PowerShell shell tool`；edit 与本交接文档会在当前会话结束前一并提交，提交后工作区应干净。
+- 最近已提交功能为 shell 与 edit；本轮 subagent、协议/UI/持久化回归及文档会以 `feat: add parallel subagent tool` 提交，提交后工作区应干净。
 - 包管理器和 agent 运行时为 Bun，本机实测 `1.3.14`；WebdriverIO 通过根 `mise.toml` 固定 Node 24。
 - Tauri `2.11.5`、AI SDK `7.0.31`、HeroUI `3.2.2`。
 - 本次会话没有 push；是否推送由下一会话或用户决定。
@@ -45,13 +45,21 @@
 - 只编辑 UTF-8 常规文件，保留 BOM、原换行风格和文件 mode；同文件 mutex 覆盖读/匹配/写，同目录临时文件 flush 后原子 rename。
 - 返回策略、替换次数、增删行统计和有上限的实际 replacement diff。AI SDK 工具生命周期生成独立 nyan `toolExecutionId`，开始/完成写入 JSONL，桌面可实时显示并恢复 diff 卡片。
 
+### 阶段 5：subagent
+
+- 主 agent 的第三个工具一次接受 1–3 个带唯一任务 ID 的独立任务，执行层以并发上限 3 调度并等待全部 settle；单项失败不会丢失兄弟任务的成功结果。
+- 每个 subagent 使用同一模型和独立上下文，只有 shell/edit，没有 subagent，因此不能递归委派；独立 step limit 为 30，最终返回主模型的每项文本按 64 KiB UTF-8 字节上限截断。
+- 主 agent、所有 subagent 共用同一个 `EditManager` 和同一组 worker tools，因此沿用既有每文件 mutex，无需新增第二套锁；父 AbortSignal 同时传入子模型和 shell，停止主 turn 会级联清理子进程。
+- 主提示词要求任务写清范围、预期结果和是否允许修改，并避免多个写任务修改同一文件；“只探索不修改”仍是提示词边界，不是权限模式。
+- `subagent.activity` 携带 subagent/task ID、running/completed/failed/cancelled 状态、reasoning/tool/text 类型和截断 preview。桌面每个子任务只覆盖一行最新活动；JSONL 只保存开始与终态快照，恢复时折叠成同一项，最终摘要仅作为父工具结果供主模型使用。
+
 ## 真实模型配置
 
 - 本机配置文件：`C:\Users\Admin\.config\nyan\config.toml`，不属于仓库，也不要提交。
 - 默认模型：`ark/minimax-m3`；Anthropic-compatible base URL 为 `https://ark.cn-beijing.volces.com/api/coding/v1`。
 - 凭据使用 `auth_token_env = "ARK_TOKEN"`；配置文件只保存变量名。任何日志、文档和提交都不得记录 token 值。
 - 模型 limits：`context_window = 1000000`、`max_output_tokens = 128000`。上下文窗口目前作为配置元数据保留；`maxOutputTokens` 已显式传给 AgentRunner。
-- 已用真实 AgentRunner 流式请求验证，模型成功返回 `NYAN_OK`。尚未完成真实桌面 shell/edit 完整回合、停止和工具卡片交互验收。
+- 已用真实 AgentRunner 流式请求验证，模型成功返回 `NYAN_OK`。尚未完成真实桌面 shell/edit/subagent 完整回合、停止和工具卡片交互验收。
 
 ## 配置与数据路径
 
@@ -71,21 +79,22 @@
 ## 最近验证
 
 - `bun run check` 通过。
-- `bun run test` 通过：protocol 7 项、agent 48 项、desktop 9 项、Rust 7 项。
+- `bun run test` 通过：protocol 7 项、agent 52 项、desktop 10 项、Rust 7 项。
 - `bun run build`、`cargo fmt --check`、`git diff --check` 通过；production build 只有已知大 chunk warning。
 - `bun run e2e` 通过：真实 Tauri/WebView2，1 个 spec、1 个测试。
 - shell 测试覆盖中文/UTF-8、长命令、截断、轮询、超时、AbortSignal 和真实进程树清理。
 - edit 测试覆盖五种实际 matcher、CRLF/BOM、新建、唯一性、`replaceAll`、跨度保护、并发 mutex、失败不写盘及 AI SDK/桌面集成。
+- subagent 测试覆盖三个任务真实并发、阻塞聚合、兄弟任务部分失败、父取消级联、活动首末快照持久化与桌面单行恢复。
 - 真实 `ark/minimax-m3` AgentRunner 流式请求通过。
 
 ## 下一会话建议执行顺序
 
 1. 检查 `git status`，按 [00-index.md](00-index.md) 顺序阅读产品、技术方案、状态和本文件。
-2. 阅读锁定版本 `apps/agent/node_modules/ai/docs` 中 ToolLoopAgent 嵌套 agent、tool execute 的 `abortSignal` 和 lifecycle callback 文档，不凭记忆编写 AI SDK 代码。
-3. 先实现可独立测试的 subagent runner/并发聚合，再注册主 agent 的第三个工具；subagent 工具集合只复用 shell/edit。
-4. 增加 1–3 任务并发、部分失败、活动预览覆盖、step limit、输出上限和父取消级联测试，然后接入 JSONL/UI。
-5. 运行根级 check/test/build/e2e，更新 [01-state.md](01-state.md) 并提交；不要提交本机 `config.toml`、密钥或真实会话数据。
+2. 从阶段 6 的故障矩阵开始，盘点现有 Rust supervisor、NDJSON codec、SessionStore 恢复和 E2E 覆盖，优先补最可能破坏用户数据或遗留进程的缺口。
+3. 验证 `apps/agent/dist/main.js` 在 Tauri production resource 中的实际路径和全局 Bun 启动方式，再做 Bun 缺失、重新检测及安装包 smoke test。
+4. 使用真实 provider 时只读取现有环境变量，绝不把 token、真实配置或会话数据写入测试夹具、日志和提交。
+5. 每个阶段 6 切片完成后运行根级 check/test/build/e2e，更新 [01-state.md](01-state.md) 并提交。
 
 ## 新会话开场建议
 
-工作区干净后，直接从“实现最多三个并行、阻塞聚合、不可递归且可级联取消的 subagent 工具”开始。无需重新实现 shell、edit、增量侧栏、运行态恢复、标题事件、环境变量凭据或 Mica。
+工作区干净后，直接从“盘点并补齐阶段 6 的恢复、崩溃和非法协议故障矩阵”开始。无需重新实现 shell、edit、subagent、增量侧栏、运行态恢复、标题事件、环境变量凭据或 Mica。

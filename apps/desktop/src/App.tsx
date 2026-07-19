@@ -9,7 +9,7 @@ import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
 import { INITIAL_VISIBLE_ITEMS, nextVisibleLimit, resetVisibleLimits, visibleItems, visibleLimit } from "./listVisibility";
 import { activeTurnFromSessions } from "./sessionState";
-import { formatToolCompletion, formatToolStart, toolHeading, toTranscriptItems, updateToolItem, type TranscriptItem, type TranscriptRecord } from "./transcript";
+import { formatToolCompletion, formatToolStart, toolHeading, toTranscriptItems, updateSubagentItem, updateToolItem, type TranscriptItem, type TranscriptRecord } from "./transcript";
 import "./App.css";
 
 type BackendStatus =
@@ -78,6 +78,9 @@ function App() {
       }
       if (message.type === "tool.completed" && message.sessionId === selectedSessionRef.current) {
         setTranscript((current) => updateToolItem(current, message.toolExecutionId, (text) => formatToolCompletion(toolHeading(text), message.output)));
+      }
+      if (message.type === "subagent.activity" && message.sessionId === selectedSessionRef.current) {
+        setTranscript((current) => updateSubagentItem(current, message.subagentId, message.taskId, message.status, message.kind, message.preview));
       }
       if (message.type === "turn.completed" || message.type === "turn.cancelled" || message.type === "turn.failed") {
         const terminalStatus = message.type === "turn.completed" ? "completed" : message.type === "turn.cancelled" ? "cancelled" : "failed";
@@ -313,7 +316,7 @@ function App() {
             <div className="welcome"><div className="welcome-icon"><MessageSquare size={24} /></div><h2>今天想做点什么？</h2><p>选择项目后发送任务，nyan 会在对应目录中工作。</p></div>
           ) : transcript.map((item) => (
             <article className={`message message-${item.role}`} key={item.id}>
-              {item.role === "assistant" ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : item.role === "tool" ? <pre>{item.text}</pre> : <p>{item.text}</p>}
+              {item.role === "assistant" ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : item.role === "tool" || item.role === "subagent" ? <pre>{item.text}</pre> : <p>{item.text}</p>}
             </article>
           ))}
           {streamingText && <article className="message message-assistant streaming"><p>{streamingText}</p></article>}

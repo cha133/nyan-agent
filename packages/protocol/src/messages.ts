@@ -48,7 +48,13 @@ export type TurnEvent =
   | (TurnEventBase<"tool.started"> & { toolExecutionId: ToolExecutionId; toolName: string; input: unknown })
   | (TurnEventBase<"tool.output"> & { toolExecutionId: ToolExecutionId; preview: string })
   | (TurnEventBase<"tool.completed"> & { toolExecutionId: ToolExecutionId; output: unknown })
-  | (TurnEventBase<"subagent.activity"> & { subagentId: SubagentId; kind: "reasoning" | "tool" | "text"; preview: string })
+  | (TurnEventBase<"subagent.activity"> & {
+      subagentId: SubagentId;
+      taskId: string;
+      status: "running" | "completed" | "failed" | "cancelled";
+      kind: "reasoning" | "tool" | "text";
+      preview: string;
+    })
   | TurnEventBase<"turn.completed">
   | (TurnEventBase<"turn.failed"> & { error: ProtocolError })
   | TurnEventBase<"turn.cancelled">;
@@ -191,6 +197,8 @@ export function parseServerMessage(value: unknown): ServerMessage {
         break;
       case "subagent.activity":
         requireUuid(message, "subagentId");
+        requireString(message, "taskId");
+        if (message.status !== "running" && message.status !== "completed" && message.status !== "failed" && message.status !== "cancelled") throw invalid("subagent.activity.status is invalid");
         if (message.kind !== "reasoning" && message.kind !== "tool" && message.kind !== "text") throw invalid("subagent.activity.kind is invalid");
         requireString(message, "preview");
         break;
