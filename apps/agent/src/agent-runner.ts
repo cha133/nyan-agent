@@ -1,5 +1,6 @@
 import { generateText, isStepCount, jsonSchema, tool, ToolLoopAgent, type LanguageModel, type ModelMessage } from "ai";
 import type { ToolExecutionId } from "@nyan/protocol";
+import { EditManager, type EditInput } from "./edit";
 import { ShellManager, type ShellInput } from "./shell";
 
 export type RunnerEvent =
@@ -23,6 +24,7 @@ export class AgentRunner {
     onEvent: (event: RunnerEvent) => void | Promise<void>;
   }): Promise<RunResult> {
     const shell = new ShellManager();
+    const edit = new EditManager();
     const toolExecutions = new Map<string, ToolExecutionId>();
     const tools = {
       shell: tool({
@@ -43,6 +45,24 @@ export class AgentRunner {
           },
         }),
         execute: async (input, { abortSignal }) => shell.execute(input, {
+          cwd: options.cwd,
+          abortSignal,
+        }),
+      }),
+      edit: tool({
+        description: "Create a UTF-8 text file or replace oldText with newText in one file. Uses safe fuzzy whitespace fallbacks, requires a unique match by default, preserves BOM and line endings, and writes atomically.",
+        inputSchema: jsonSchema<EditInput>({
+          type: "object",
+          additionalProperties: false,
+          required: ["filePath", "oldText", "newText"],
+          properties: {
+            filePath: { type: "string", description: "Absolute path or path relative to the task cwd." },
+            oldText: { type: "string", description: "Text to replace. Use an empty string only when creating a file that does not exist." },
+            newText: { type: "string", description: "Replacement text or the complete content of a newly created file." },
+            replaceAll: { type: "boolean", description: "Replace every match. Defaults to false; fuzzy block-anchor matching always requires one unique candidate." },
+          },
+        }),
+        execute: async (input, { abortSignal }) => edit.execute(input, {
           cwd: options.cwd,
           abortSignal,
         }),
@@ -129,6 +149,8 @@ function shellInstructions(cwd: string): string {
   return `You are Nyan, a coding agent working in ${cwd}. Be concise and accurate.
 
 Use the shell tool for reading, searching, builds, tests, and process work. It runs PowerShell 7 with the task directory as its default cwd. Prefer rg for text and file searches. Poll a returned processId when status is running; use write only when a process needs stdin, and kill processes you no longer need.
+
+Use the edit tool for precise changes to one UTF-8 text file. Include enough unchanged surrounding context in oldText to make the match unique. Set replaceAll only when every occurrence should change. To create a new file, use empty oldText; never use empty oldText to overwrite an existing file. Read a file again after a rejected match instead of guessing a broader replacement.
 
 You have full filesystem access, so handle irreversible operations carefully. Use -LiteralPath for filesystem mutations. Before recursive deletion or moving, resolve and verify the exact absolute targets. Never recursively delete a workspace root, user home, or another broad path. Do not build destructive commands by passing paths between different shells.`;
 }

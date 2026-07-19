@@ -1,6 +1,9 @@
 import { describe, expect, test } from "bun:test";
 import { simulateReadableStream } from "ai";
 import { MockLanguageModelV4 } from "ai/test";
+import { mkdtemp, readFile, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { AgentRunner, fallbackTitle } from "./agent-runner";
 
 const usage = {
@@ -85,5 +88,46 @@ describe("agent runner", () => {
     expect(completed?.toolExecutionId).toBe(started?.toolExecutionId);
     expect(JSON.stringify(completed)).toContain("TOOL_OK");
     expect(events.at(-1)).toEqual({ type: "text.completed", text: "done" });
+  });
+
+  test("executes edit calls through the same tool lifecycle", async () => {
+    const cwd = await mkdtemp(join(tmpdir(), "nyan-runner-edit-"));
+    try {
+      await writeFile(join(cwd, "file.txt"), "old", "utf8");
+      const input = JSON.stringify({ filePath: "file.txt", oldText: "old", newText: "new" });
+      let call = 0;
+      const model = new MockLanguageModelV4({
+        doStream: async () => {
+          call++;
+          if (call === 1) return { stream: simulateReadableStream({ chunks: [
+            { type: "tool-input-start", id: "provider-edit-1", toolName: "edit" },
+            { type: "tool-input-delta", id: "provider-edit-1", delta: input },
+            { type: "tool-input-end", id: "provider-edit-1" },
+            { type: "tool-call", toolCallId: "provider-edit-1", toolName: "edit", input },
+            { type: "finish", finishReason: { unified: "tool-calls", raw: undefined }, logprobs: undefined, usage },
+          ] }) };
+          return { stream: simulateReadableStream({ chunks: [
+            { type: "text-start", id: "text-edit" },
+            { type: "text-delta", id: "text-edit", delta: "edited" },
+            { type: "text-end", id: "text-edit" },
+            { type: "finish", finishReason: { unified: "stop", raw: undefined }, logprobs: undefined, usage },
+          ] }) };
+        },
+      });
+      const events: Array<Record<string, unknown>> = [];
+      const result = await new AgentRunner(model).run({
+        cwd,
+        messages: [{ role: "user", content: "edit it" }],
+        abortSignal: new AbortController().signal,
+        onEvent: (event) => { events.push(event); },
+      });
+
+      expect(result.status).toBe("completed");
+      expect(await readFile(join(cwd, "file.txt"), "utf8")).toBe("new");
+      expect(events.find((event) => event.type === "tool.started")).toMatchObject({ toolName: "edit", input: { filePath: "file.txt" } });
+      expect(JSON.stringify(events.find((event) => event.type === "tool.completed"))).toContain('"strategy":"exact"');
+    } finally {
+      await rm(cwd, { recursive: true, force: true });
+    }
   });
 });

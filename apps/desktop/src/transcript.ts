@@ -29,8 +29,10 @@ export function toolHeading(text: string): string {
 }
 
 export function formatToolStart(toolName: string, input: unknown): string {
-  const value = input as { command?: unknown; processId?: unknown; action?: unknown } | undefined;
-  const detail = typeof value?.command === "string"
+  const value = input as { command?: unknown; processId?: unknown; action?: unknown; filePath?: unknown } | undefined;
+  const detail = typeof value?.filePath === "string"
+    ? value.filePath
+    : typeof value?.command === "string"
     ? value.command
     : [value?.action, value?.processId].filter((part) => typeof part === "string").join(" ");
   const compact = detail.replace(/\s+/g, " ").trim();
@@ -38,12 +40,16 @@ export function formatToolStart(toolName: string, input: unknown): string {
 }
 
 export function formatToolCompletion(heading: string, output: unknown): string {
-  const value = output as { status?: unknown; output?: unknown; exitCode?: unknown; originalBytes?: unknown; truncated?: unknown; error?: unknown } | undefined;
+  const value = output as { status?: unknown; output?: unknown; diff?: unknown; exitCode?: unknown; originalBytes?: unknown; truncated?: unknown; error?: unknown } | undefined;
   const hasError = typeof value?.error === "string" && value.error.length > 0;
   const status = hasError ? "failed" : typeof value?.status === "string" ? value.status : "completed";
   const exit = typeof value?.exitCode === "number" ? ` · exit ${value.exitCode}` : "";
   const truncation = value?.truncated && typeof value.originalBytes === "number" ? ` · ${value.originalBytes} bytes（已截断）` : "";
   const title = heading.replace(" · 运行中", ` · ${status}${exit}${truncation}`);
-  const detail = typeof value?.output === "string" && value.output ? value.output : hasError ? value.error as string : "";
+  const detail = typeof value?.diff === "string" && value.diff
+    ? value.diff
+    : typeof value?.output === "string" && value.output
+      ? value.output
+      : hasError ? value.error as string : "";
   return detail ? `${title}\n\n${detail}` : title;
 }

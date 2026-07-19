@@ -77,9 +77,8 @@
 
 ## 下一步：阶段 5 — 三个工具
 
-- 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
 - 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
-- 用真实 provider 在桌面端验收 shell 工具调用、长进程轮询与停止；自动化底层覆盖已完成。
+- 用真实 provider 在桌面端验收 shell/edit 工具调用、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 进行中：阶段 4 — 产品外壳
 
@@ -141,7 +140,7 @@
 
 - [x] 确定 shell 启动折中：默认加载 Profile，设置 `TERM=dumb` + `NYAN_AGENT=1` 跳过交互增强，并保留 `-NonInteractive` 防止提示挂起；不使用 `-NoProfile`。
 - [x] 实现 shell：PowerShell UTF-8 包装、合并输出、字节截断、长进程、超时和取消。
-- [ ] 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
+- [x] 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
 - [ ] 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
 
 ### 阶段 5 当前验证记录
@@ -151,7 +150,11 @@
 - 单个 `shell` 模型工具同时支持启动、`processId` 轮询、stdin、关闭 stdin 与 kill；默认超时、turn 取消和 turn 收尾都会终止进程树，Windows 使用 `taskkill /T /F`，真实孙进程延迟写文件测试确认没有遗留。
 - AI SDK v7 的 `onToolExecutionStart/End` 回调映射为独立 nyan `toolExecutionId`，provider tool-call ID 不进入领域协议；工具开始/完成写入 JSONL，桌面端可实时展示并从 transcript 恢复同一工具卡片。
 - 新增 shell/agent/backend/desktop 回归，覆盖中文命令与路径、Python 中文 stdin/stdout、中文 stderr、引号、长命令回退、UTF-8 头尾截断、非零退出码、长进程轮询、超时进程树和 AbortSignal 级联取消。
-- 本轮重新通过 `bun run check`、protocol 7 项、agent 32 项、desktop 8 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为 1 个 spec、1 个测试，production bundle 仍只有既有大 chunk 提示。
+- edit runtime 将请求和源文件规范化到 LF 后依次尝试 exact、line-trimmed、indentation-flexible、whitespace-normalized 与 block-anchor；默认要求唯一匹配，`replaceAll` 只选择不重叠候选，block-anchor 即使显式 `replaceAll` 也必须唯一并通过中间内容相似度阈值。
+- edit 对模糊候选执行行数与字符跨度比例保护；已有文件拒绝空 `oldText`，不存在文件仅允许空 `oldText` 创建，拒绝目录、非 UTF-8、无变化和提前取消。每文件 mutex 覆盖读/匹配/写全过程，同目录临时文件经 flush 后原子 rename，保留 UTF-8 BOM、原换行风格与文件 mode。
+- edit 返回实际匹配策略、替换次数、增删行统计和有上限的 diff；AI SDK 注册、独立 nyan tool ID、JSONL 工具记录以及桌面实时/恢复 diff 卡片复用现有通用工具链路。
+- 新增 15 项 edit runtime 测试和 agent/desktop 集成回归，覆盖五种实际 matcher、CRLF/BOM、新建、`replaceAll`、重叠候选、跨度保护、并发串行、无写入失败路径和真实 AI SDK 工具执行。
+- 本轮重新通过 `bun run check`、protocol 7 项、agent 48 项、desktop 9 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为 1 个 spec、1 个测试，production bundle 仍只有既有大 chunk 提示。
 
 ### 阶段 6 — 稳定与发布
 
