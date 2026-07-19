@@ -1,7 +1,7 @@
 import { createAnthropic } from "@ai-sdk/anthropic";
 import { createOpenAICompatible } from "@ai-sdk/openai-compatible";
 import type { LanguageModel } from "ai";
-import type { NyanConfig, ProviderConfig } from "./config";
+import type { ModelLimits, NyanConfig, ProviderConfig } from "./config";
 
 export type ModelKey = `${string}/${string}`;
 
@@ -17,6 +17,11 @@ export class ProviderRegistry {
     const provider = this.providers.get(providerId);
     if (!provider) throw new Error(`provider_not_found: ${providerId}`);
     return provider.languageModel(modelId);
+  }
+
+  limits(key: string): ModelLimits | undefined {
+    const { providerId, modelId } = splitModelKey(key);
+    return this.config.providers.find((provider) => provider.id === providerId)?.modelLimits[modelId];
   }
 }
 

@@ -2,7 +2,7 @@ import type { LanguageModel, ModelMessage } from "ai";
 import type { ClientMessage, ProtocolError, ServerMessage, SessionId, TurnEvent, TurnId } from "@nyan/protocol";
 import { homedir } from "node:os";
 import { AgentRunner, fallbackTitle, type RunResult, type RunnerEvent } from "./agent-runner";
-import { type NyanConfig, ConfigError, loadConfig } from "./config";
+import { type ModelLimits, type NyanConfig, ConfigError, loadConfig } from "./config";
 import { ModelCatalog } from "./models";
 import { type NyanPaths, resolveNyanPaths } from "./paths";
 import { ProviderRegistry } from "./providers";
@@ -25,7 +25,7 @@ type Runner = {
 type BackendOptions = {
   paths?: NyanPaths;
   config?: NyanConfig;
-  runnerFactory?: (model: LanguageModel) => Runner;
+  runnerFactory?: (model: LanguageModel, limits?: ModelLimits) => Runner;
   emit?: (message: ServerMessage) => void | Promise<void>;
 };
 
@@ -37,7 +37,7 @@ export class AgentBackend {
   private readonly store: SessionStore;
   private readonly projects: ProjectStore;
   private readonly state: RuntimeStateStore;
-  private readonly runnerFactory: (model: LanguageModel) => Runner;
+  private readonly runnerFactory: (model: LanguageModel, limits?: ModelLimits) => Runner;
   private readonly emit: (message: ServerMessage) => void | Promise<void>;
   private config?: NyanConfig;
   private registry?: ProviderRegistry;
@@ -52,7 +52,7 @@ export class AgentBackend {
     this.projects = new ProjectStore(this.paths);
     this.state = new RuntimeStateStore(this.paths);
     this.config = options.config;
-    this.runnerFactory = options.runnerFactory ?? ((model) => new AgentRunner(model));
+    this.runnerFactory = options.runnerFactory ?? ((model, limits) => new AgentRunner(model, limits?.maxOutputTokens));
     this.emit = options.emit ?? (() => {});
   }
 
@@ -196,7 +196,7 @@ export class AgentBackend {
     try {
       const session = await this.store.load(sessionId);
       if (!session) throw new Error("session_not_found");
-      const runner = this.runnerFactory(this.registry!.model(session.model));
+      const runner = this.runnerFactory(this.registry!.model(session.model), this.registry!.limits(session.model));
       const messages = await this.store.messages(sessionId);
       await this.store.append(sessionId, "turn.started", {}, turnId);
       await send({ type: "turn.started" });

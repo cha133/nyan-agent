@@ -4,6 +4,11 @@ import { isNotFound } from "./files";
 
 export type ProviderKind = "anthropic-compatible" | "openai-compatible";
 
+export type ModelLimits = {
+  contextWindow: number;
+  maxOutputTokens: number;
+};
+
 export type ProviderConfig = {
   id: string;
   kind: ProviderKind;
@@ -12,6 +17,7 @@ export type ProviderConfig = {
   authToken?: string;
   headers: Record<string, string>;
   models: string[];
+  modelLimits: Record<string, ModelLimits>;
   discoverModels: boolean;
   discoveryUrl?: string;
   discoveryHeaders: Record<string, string>;
@@ -31,7 +37,7 @@ export class ConfigError extends Error {
   }
 }
 
-export async function loadConfig(paths: NyanPaths): Promise<NyanConfig> {
+export async function loadConfig(paths: NyanPaths, env: Record<string, string | undefined> = process.env): Promise<NyanConfig> {
   let source: string;
   try {
     source = await readFile(paths.configFile, "utf8");
@@ -45,13 +51,13 @@ export async function loadConfig(paths: NyanPaths): Promise<NyanConfig> {
   } catch {
     throw new ConfigError("config_invalid", `Invalid TOML in ${paths.configFile}`);
   }
-  return parseConfig(parsed);
+  return parseConfig(parsed, env);
 }
 
-export function parseConfig(value: unknown): NyanConfig {
+export function parseConfig(value: unknown, env: Record<string, string | undefined> = process.env): NyanConfig {
   const root = object(value, "config");
   if (root.version !== 1) throw invalid("version must be 1");
-  const providers = array(root.providers, "providers").map((entry, index) => parseProvider(entry, index));
+  const providers = array(root.providers, "providers").map((entry, index) => parseProvider(entry, index, env));
   if (providers.length === 0) throw invalid("at least one provider is required");
   const ids = new Set<string>();
   for (const provider of providers) {
@@ -63,15 +69,15 @@ export function parseConfig(value: unknown): NyanConfig {
   return { version: 1, defaultModel, modelCacheTtlSeconds: ttl, providers };
 }
 
-function parseProvider(value: unknown, index: number): ProviderConfig {
+function parseProvider(value: unknown, index: number, env: Record<string, string | undefined>): ProviderConfig {
   const provider = object(value, `providers[${index}]`);
   const id = requiredString(provider.id, `providers[${index}].id`);
   if (!/^[a-z0-9][a-z0-9-]*$/.test(id)) throw invalid(`provider id must use lowercase letters, numbers, and hyphens: ${id}`);
   const kind = requiredString(provider.kind, `providers[${index}].kind`);
   if (kind !== "anthropic-compatible" && kind !== "openai-compatible") throw invalid(`unsupported provider kind: ${kind}`);
   const baseUrl = url(requiredString(provider.base_url, `providers[${index}].base_url`), `providers[${index}].base_url`);
-  const apiKey = optionalString(provider.api_key, `providers[${index}].api_key`);
-  const authToken = optionalString(provider.auth_token, `providers[${index}].auth_token`);
+  const apiKey = credential(provider, "api_key", `providers[${index}]`, env);
+  const authToken = credential(provider, "auth_token", `providers[${index}]`, env);
   if (kind === "anthropic-compatible" && Boolean(apiKey) === Boolean(authToken)) {
     throw invalid(`Anthropic-compatible provider ${id} requires exactly one of api_key or auth_token`);
   }
@@ -87,7 +93,30 @@ function parseProvider(value: unknown, index: number): ProviderConfig {
     discoverModels: provider.discover_models === undefined ? false : boolean(provider.discover_models, `providers[${index}].discover_models`),
     discoveryUrl: provider.discovery_url === undefined ? undefined : url(requiredString(provider.discovery_url, `providers[${index}].discovery_url`), `providers[${index}].discovery_url`),
     discoveryHeaders: stringRecord(provider.discovery_headers, `providers[${index}].discovery_headers`),
+    modelLimits: modelLimits(provider.model_limits, `providers[${index}].model_limits`),
   };
+}
+
+function credential(provider: Record<string, unknown>, key: "api_key" | "auth_token", name: string, env: Record<string, string | undefined>): string | undefined {
+  const direct = optionalString(provider[key], `${name}.${key}`);
+  const envKey = optionalString(provider[`${key}_env`], `${name}.${key}_env`);
+  if (direct && envKey) throw invalid(`${name} must not set both ${key} and ${key}_env`);
+  if (!envKey) return direct;
+  if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(envKey)) throw invalid(`${name}.${key}_env must be an environment variable name`);
+  const resolved = env[envKey];
+  if (!resolved) throw invalid(`${name}.${key}_env references a missing or empty environment variable: ${envKey}`);
+  return resolved;
+}
+
+function modelLimits(value: unknown, name: string): Record<string, ModelLimits> {
+  if (value === undefined) return {};
+  return Object.fromEntries(Object.entries(object(value, name)).map(([modelId, entry]) => {
+    const limits = object(entry, `${name}.${modelId}`);
+    return [modelId, {
+      contextWindow: positiveInteger(limits.context_window, `${name}.${modelId}.context_window`),
+      maxOutputTokens: positiveInteger(limits.max_output_tokens, `${name}.${modelId}.max_output_tokens`),
+    }];
+  }));
 }
 
 function object(value: unknown, name: string): Record<string, unknown> {

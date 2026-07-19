@@ -50,7 +50,7 @@ MVP 只提供三个模型工具：
 
 - 只支持 Anthropic-compatible 与 OpenAI-compatible provider，分别基于 `@ai-sdk/anthropic` 和 `@ai-sdk/openai-compatible`。
 - `~/.config/nyan/config.toml` 可配置多个 provider；每个 provider 可配置多个静态 model，也可开启动态模型发现。
-- API key、base URL、自定义 header 等 provider 凭据直接配置在 `config.toml`。MVP 不接 Windows Credential Manager。
+- API key、base URL、自定义 header 等 provider 凭据可直接配置在 `config.toml`；API key/auth token 也可通过 `api_key_env`/`auth_token_env` 引用启动进程环境变量。MVP 不接 Windows Credential Manager。
 - 动态发现结果写入独立 cache 文件，不回写 `config.toml`；默认 TTL 为 1 小时。
 - 最近使用的模型在所有项目间共享。用户配置提供默认模型，运行时最近选择写入 state 文件，避免程序改写带注释的 TOML。
 - Windows 默认配置根目录固定为 `~/.config/nyan`，不使用 `%APPDATA%`。保留 XDG 环境变量作为显式路径覆盖，主要用于自动化测试和隔离真实配置。

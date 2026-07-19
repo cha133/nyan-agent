@@ -94,12 +94,12 @@ discover_models = true
 id = "anthropic-main"
 kind = "anthropic-compatible"
 base_url = "https://example.com/v1"
-api_key = "..."
+auth_token_env = "ANTHROPIC_TOKEN"
 models = ["claude-example"]
 discover_models = false
 ```
 
-静态 `models` 与动态发现结果取稳定去重后的并集。`provider id + model id` 构成 UI 和持久化中的稳定模型键。`config.toml` 由用户维护，程序读取但不自动重排或回写；最近选择写入 state 文件。
+静态 `models` 与动态发现结果取稳定去重后的并集。`provider id + model id` 构成 UI 和持久化中的稳定模型键。凭据可直接写 `api_key`/`auth_token`，也可用 `api_key_env`/`auth_token_env` 引用环境变量；同一凭据不得同时使用两种来源。兼容端点的未知模型可在 `model_limits` 中显式提供 `context_window` 与 `max_output_tokens`，避免 provider SDK 采用保守默认值。`config.toml` 由用户维护，程序读取但不自动重排或回写；最近选择写入 state 文件。
 
 ## 4. Rust supervisor
 

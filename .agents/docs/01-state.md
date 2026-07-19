@@ -77,7 +77,7 @@
 
 ## 下一步：阶段 4 — 产品外壳
 
-- 使用真实 provider 配置手动验收完整回合；自动化已覆盖 provider mock，仓库不保存真实凭据。
+- 在真实桌面 UI 中验收完整回合、任务切换、停止和标题更新；底层真实 provider 流式调用已通过。
 - 在现有真实桌面 E2E 基础上补充任务切换、停止和标题更新回归覆盖。
 - 收尾窗口细节与阶段 4 验收；Win11 Mica spike 已完成。
 
@@ -95,6 +95,7 @@
 - [x] 将产品外壳与 HeroUI 语义主题统一为 Catppuccin Latte：Mauve 作为主强调色，Base/Mantle/Crust 构成页面层级，并映射完整状态色、焦点色与表单色。
 - [x] 将侧栏项目、无项目任务及各项目任务列表改为独立可见上限：初始 5 条、每次增加 10 条、全部显示后才提供折叠；折叠项目列表时递归重置所有项目任务列表。
 - [x] 修正运行中任务切换与刷新恢复：session metadata 恢复全局 active turn，其他任务只读查看且明确提示；标题生成完成后通过 `session.title.updated` 独立事件即时更新侧栏和标题栏，不阻塞主 turn。
+- [x] Provider 凭据支持 `api_key_env`/`auth_token_env` 环境变量引用；兼容端点可为未知模型配置上下文窗口与最大输出，AgentRunner 显式传递 `maxOutputTokens`，避免 Anthropic SDK 的 4,096 保守默认值。
 
 ### 阶段 4 当前验证记录
 
@@ -109,6 +110,7 @@
 - Catppuccin Latte 配色调整后通过 `bun run build:desktop` 与 `git diff --check`；desktop production bundle 继续只有既有的大 chunk 提示。
 - 侧栏增量展开新增 5 项桌面纯逻辑测试，覆盖 5 → 15 → 25 增量、末页截断、全部显示后折叠和父级递归重置；重新通过 `bun run check`、`bun run test`、`bun run build` 与 `git diff --check`，production bundle 仍只有既有的大 chunk 提示。
 - 标题/运行态修正新增协议 golden fixture、后端标题事件断言和 2 项桌面恢复测试；`bun run check`、protocol 7 项、agent 20 项、desktop 7 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e` 均通过，E2E 仍为 1 个 spec、1 个测试。
+- 使用本机 `ARK_TOKEN` 与 `~/.config/nyan/config.toml` 实测 Anthropic-compatible `https://ark.cn-beijing.volces.com/api/coding/v1`、`minimax-m3`：AgentRunner 流式请求成功返回 `NYAN_OK`，实际加载 `contextWindow=1000000`、`maxOutputTokens=128000`；配置文件只保存环境变量名，不保存密钥值。
 
 ## 后续实施队列
 

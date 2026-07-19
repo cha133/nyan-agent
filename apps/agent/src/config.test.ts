@@ -50,6 +50,29 @@ describe("paths and config", () => {
     expect(() => parseConfig({ ...rawConfig, providers: [{ id: "anthropic", kind: "anthropic-compatible", base_url: "https://example.test" }] })).toThrow("exactly one");
   });
 
+  test("resolves environment credentials and model limits without storing the secret", () => {
+    const parsed = parseConfig({
+      version: 1,
+      providers: [{
+        id: "ark",
+        kind: "anthropic-compatible",
+        base_url: "https://ark.example/api/coding/v1",
+        auth_token_env: "ARK_TOKEN",
+        models: ["minimax-m3"],
+        model_limits: { "minimax-m3": { context_window: 1_000_000, max_output_tokens: 128_000 } },
+      }],
+    }, { ARK_TOKEN: "resolved-secret" });
+
+    expect(parsed.providers[0]).toMatchObject({
+      authToken: "resolved-secret",
+      modelLimits: { "minimax-m3": { contextWindow: 1_000_000, maxOutputTokens: 128_000 } },
+    });
+    expect(() => parseConfig({
+      version: 1,
+      providers: [{ id: "ark", kind: "anthropic-compatible", base_url: "https://ark.example", auth_token_env: "ARK_TOKEN" }],
+    }, {})).toThrow("references a missing or empty environment variable: ARK_TOKEN");
+  });
+
   test("does not expose credential text from malformed TOML", async () => {
     const root = await mkdtemp(join(tmpdir(), "nyan-config-"));
     const paths = resolveNyanPaths({ XDG_CONFIG_HOME: join(root, "cfg") }, root);

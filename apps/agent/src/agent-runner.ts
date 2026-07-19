@@ -9,7 +9,7 @@ export type RunnerEvent =
 export type RunResult = { status: "completed" | "cancelled"; responseMessages: ModelMessage[] };
 
 export class AgentRunner {
-  constructor(private readonly model: LanguageModel) {}
+  constructor(private readonly model: LanguageModel, private readonly maxOutputTokens?: number) {}
 
   async run(options: {
     cwd: string;
@@ -22,6 +22,7 @@ export class AgentRunner {
       instructions: `You are Nyan, a coding agent working in ${options.cwd}. Be concise, accurate, and respect the user's workspace.`,
       tools: {},
       stopWhen: isStepCount(50),
+      maxOutputTokens: this.maxOutputTokens,
     });
     const result = await agent.stream({ messages: options.messages, abortSignal: options.abortSignal });
     const text = new Map<string, string>();
