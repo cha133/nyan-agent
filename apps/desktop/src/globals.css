@@ -1,2 +1,67 @@
 @import "tailwindcss";
 @import "@heroui/styles";
+
+:root,
+[data-theme="catppuccin-latte"] {
+  color-scheme: light;
+
+  /* Catppuccin Latte */
+  --ctp-rosewater: #dc8a78;
+  --ctp-flamingo: #dd7878;
+  --ctp-pink: #ea76cb;
+  --ctp-mauve: #8839ef;
+  --ctp-red: #d20f39;
+  --ctp-maroon: #e64553;
+  --ctp-peach: #fe640b;
+  --ctp-yellow: #df8e1d;
+  --ctp-green: #40a02b;
+  --ctp-teal: #179299;
+  --ctp-sky: #04a5e5;
+  --ctp-sapphire: #209fb5;
+  --ctp-blue: #1e66f5;
+  --ctp-lavender: #7287fd;
+  --ctp-text: #4c4f69;
+  --ctp-subtext-1: #5c5f77;
+  --ctp-subtext-0: #6c6f85;
+  --ctp-overlay-2: #7c7f93;
+  --ctp-overlay-1: #8c8fa1;
+  --ctp-overlay-0: #9ca0b0;
+  --ctp-surface-2: #acb0be;
+  --ctp-surface-1: #bcc0cc;
+  --ctp-surface-0: #ccd0da;
+  --ctp-base: #eff1f5;
+  --ctp-mantle: #e6e9ef;
+  --ctp-crust: #dce0e8;
+
+  /* HeroUI semantic theme */
+  --background: var(--ctp-base);
+  --foreground: var(--ctp-text);
+  --surface: var(--ctp-base);
+  --surface-foreground: var(--ctp-text);
+  --surface-secondary: var(--ctp-mantle);
+  --surface-secondary-foreground: var(--ctp-text);
+  --surface-tertiary: var(--ctp-crust);
+  --surface-tertiary-foreground: var(--ctp-text);
+  --overlay: var(--ctp-base);
+  --overlay-foreground: var(--ctp-text);
+  --muted: var(--ctp-subtext-0);
+  --default: var(--ctp-mantle);
+  --default-foreground: var(--ctp-text);
+  --field-background: var(--ctp-mantle);
+  --field-foreground: var(--ctp-text);
+  --accent: var(--ctp-mauve);
+  --accent-foreground: var(--ctp-base);
+  --success: var(--ctp-green);
+  --success-foreground: var(--ctp-base);
+  --warning: var(--ctp-yellow);
+  --warning-foreground: var(--ctp-text);
+  --danger: var(--ctp-red);
+  --danger-foreground: var(--ctp-base);
+  --segment: var(--ctp-base);
+  --segment-foreground: var(--ctp-text);
+  --border: var(--ctp-surface-1);
+  --separator: var(--ctp-surface-0);
+  --focus: var(--ctp-lavender);
+  --link: var(--ctp-blue);
+  --scrollbar-thumb: color-mix(in srgb, var(--ctp-overlay-0) 65%, transparent);
+}

@@ -92,6 +92,7 @@
 - [x] 补齐新任务默认项目上下文的持久化：项目/无项目上下文写入共享 runtime state，重启后恢复，项目移除时自动清理失效引用，且不会与最近模型状态互相覆盖。
 - [x] 接入稳定桌面 E2E：WebdriverIO Tauri Service embedded provider、测试专用 Tauri 权限/前端构建、临时 XDG 数据隔离和首条产品外壳 smoke flow 已落地。
 - [x] 完成 Mica/window effects spike：保留 Windows 原生标题栏与系统三按钮，窗口启用透明 WebView 和 Mica，侧栏透出材质，主内容保持白色不透明层级。
+- [x] 将产品外壳与 HeroUI 语义主题统一为 Catppuccin Latte：Mauve 作为主强调色，Base/Mantle/Crust 构成页面层级，并映射完整状态色、焦点色与表单色。
 
 ### 阶段 4 当前验证记录
 
@@ -103,6 +104,7 @@
 - E2E 使用 `mise.toml` 固定 Node 24，规避当前 WDIO 9/Undici 6 在 Node 26 下创建 session 时的 `UND_ERR_INVALID_ARG`；`@wdio/native-utils` 固定到 2.5.0，规避 Tauri service 1.2.0 发布依赖缺少导出的兼容问题。
 - Win11 Mica spike 将平台调用集中在 `platform/windows.rs`；原生标题栏、1200×800 默认尺寸和 960×640 最小尺寸保持不变，透明仅用于侧栏材质，transcript/composer 所在主内容仍为不透明白色。
 - Mica 改动后重新通过 `bun run check`、`bun run test`、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；窗口效果未破坏启动、WDIO command bridge 或项目上下文刷新恢复。
+- Catppuccin Latte 配色调整后通过 `bun run build:desktop` 与 `git diff --check`；desktop production bundle 继续只有既有的大 chunk 提示。
 
 ## 后续实施队列
 
