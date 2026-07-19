@@ -1,10 +1,15 @@
-import { generateText, isStepCount, ToolLoopAgent, type LanguageModel, type ModelMessage } from "ai";
+import { generateText, isStepCount, jsonSchema, tool, ToolLoopAgent, type LanguageModel, type ModelMessage } from "ai";
+import type { ToolExecutionId } from "@nyan/protocol";
+import { ShellManager, type ShellInput } from "./shell";
 
 export type RunnerEvent =
   | { type: "text.delta"; text: string }
   | { type: "text.completed"; text: string }
   | { type: "reasoning.delta"; text: string }
-  | { type: "reasoning.completed"; text: string };
+  | { type: "reasoning.completed"; text: string }
+  | { type: "tool.started"; toolExecutionId: ToolExecutionId; toolName: string; input: unknown }
+  | { type: "tool.output"; toolExecutionId: ToolExecutionId; preview: string }
+  | { type: "tool.completed"; toolExecutionId: ToolExecutionId; output: unknown };
 
 export type RunResult = { status: "completed" | "cancelled"; responseMessages: ModelMessage[] };
 
@@ -17,20 +22,62 @@ export class AgentRunner {
     abortSignal: AbortSignal;
     onEvent: (event: RunnerEvent) => void | Promise<void>;
   }): Promise<RunResult> {
+    const shell = new ShellManager();
+    const toolExecutions = new Map<string, ToolExecutionId>();
+    const tools = {
+      shell: tool({
+        description: "Run PowerShell 7 on Windows. Start with command, or continue a running command with processId and action poll/write/kill. Output is UTF-8 and byte-truncated.",
+        inputSchema: jsonSchema<ShellInput>({
+          type: "object",
+          additionalProperties: false,
+          properties: {
+            command: { type: "string", description: "PowerShell 7 command to start." },
+            cwd: { type: "string", description: "Optional absolute working directory. Defaults to the task cwd." },
+            timeoutMs: { type: "integer", minimum: 1, maximum: 86_400_000 },
+            yieldTimeMs: { type: "integer", minimum: 0, maximum: 30_000 },
+            maxOutputBytes: { type: "integer", minimum: 1024, maximum: 16_777_216 },
+            processId: { type: "string", description: "Opaque ID returned by a previous running shell call." },
+            action: { type: "string", enum: ["poll", "write", "kill"] },
+            stdin: { type: "string", description: "UTF-8 text to write to a running process." },
+            closeStdin: { type: "boolean" },
+          },
+        }),
+        execute: async (input, { abortSignal }) => shell.execute(input, {
+          cwd: options.cwd,
+          abortSignal,
+        }),
+      }),
+    };
     const agent = new ToolLoopAgent({
       model: this.model,
-      instructions: `You are Nyan, a coding agent working in ${options.cwd}. Be concise, accurate, and respect the user's workspace.`,
-      tools: {},
+      instructions: shellInstructions(options.cwd),
+      tools,
       stopWhen: isStepCount(50),
       maxOutputTokens: this.maxOutputTokens,
     });
-    const result = await agent.stream({ messages: options.messages, abortSignal: options.abortSignal });
+    const result = await agent.stream({
+      messages: options.messages,
+      abortSignal: options.abortSignal,
+      onToolExecutionStart: async ({ toolCall }) => {
+        const toolExecutionId = crypto.randomUUID() as ToolExecutionId;
+        toolExecutions.set(toolCall.toolCallId, toolExecutionId);
+        await options.onEvent({ type: "tool.started", toolExecutionId, toolName: toolCall.toolName, input: toolCall.input });
+      },
+      onToolExecutionEnd: async ({ toolCall, toolOutput }) => {
+        const toolExecutionId = toolExecutions.get(toolCall.toolCallId) ?? crypto.randomUUID() as ToolExecutionId;
+        const output = toolOutput.type === "tool-result" ? toolOutput.output : { error: publicToolError(toolOutput.error) };
+        await options.onEvent({ type: "tool.output", toolExecutionId, preview: previewOutput(output) });
+        await options.onEvent({ type: "tool.completed", toolExecutionId, output });
+        toolExecutions.delete(toolCall.toolCallId);
+      },
+    });
     const text = new Map<string, string>();
     const reasoning = new Map<string, string>();
     let cancelled = false;
 
-    for await (const part of result.fullStream) {
-      switch (part.type) {
+    try {
+      for await (const part of result.fullStream) {
+        switch (part.type) {
         case "text-start":
           text.set(part.id, "");
           break;
@@ -58,7 +105,10 @@ export class AgentRunner {
           break;
         case "error":
           throw part.error;
+        }
       }
+    } finally {
+      await shell.cancelAll();
     }
 
     if (cancelled || options.abortSignal.aborted) return { status: "cancelled", responseMessages: [] };
@@ -73,6 +123,24 @@ export class AgentRunner {
     });
     return cleanTitle(result.text) || fallbackTitle(prompt);
   }
+}
+
+function shellInstructions(cwd: string): string {
+  return `You are Nyan, a coding agent working in ${cwd}. Be concise and accurate.
+
+Use the shell tool for reading, searching, builds, tests, and process work. It runs PowerShell 7 with the task directory as its default cwd. Prefer rg for text and file searches. Poll a returned processId when status is running; use write only when a process needs stdin, and kill processes you no longer need.
+
+You have full filesystem access, so handle irreversible operations carefully. Use -LiteralPath for filesystem mutations. Before recursive deletion or moving, resolve and verify the exact absolute targets. Never recursively delete a workspace root, user home, or another broad path. Do not build destructive commands by passing paths between different shells.`;
+}
+
+function previewOutput(output: unknown): string {
+  const text = typeof output === "string" ? output : JSON.stringify(output);
+  if (!text) return "";
+  return text.length > 240 ? `${text.slice(0, 239)}…` : text;
+}
+
+function publicToolError(error: unknown): string {
+  return error instanceof Error ? error.message : String(error);
 }
 
 export function fallbackTitle(prompt: string): string {

@@ -1,6 +1,6 @@
 import { describe, expect, test } from "bun:test";
 import type { ModelMessage } from "ai";
-import type { ProjectId, RequestId, ServerMessage, SessionId, TurnId } from "@nyan/protocol";
+import type { ProjectId, RequestId, ServerMessage, SessionId, ToolExecutionId, TurnId } from "@nyan/protocol";
 import { mkdir, mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
@@ -79,6 +79,32 @@ describe("agent backend", () => {
     const cancelled = await backend.handle({ v: 1, type: "turn.cancel", requestId: requestId(), sessionId: firstSession, turnId });
     expect(cancelled.messages[0]).toMatchObject({ type: "response", ok: true, result: { status: "cancelling" } });
     await waitFor(() => events.some((event) => event.type === "turn.cancelled"));
+  });
+
+  test("forwards and persists shell tool lifecycle events", async () => {
+    const toolExecutionId = crypto.randomUUID() as ToolExecutionId;
+    const runner = {
+      async run(options: { onEvent: (event: RunnerEvent) => void | Promise<void> }) {
+        await options.onEvent({ type: "tool.started", toolExecutionId, toolName: "shell", input: { command: "pwd" } });
+        await options.onEvent({ type: "tool.output", toolExecutionId, preview: "C:\\work" });
+        await options.onEvent({ type: "tool.completed", toolExecutionId, output: { status: "completed", output: "C:\\work" } });
+        return { status: "completed" as const, responseMessages: [] };
+      },
+      async title() { return "Shell task"; },
+    };
+    const { backend, events } = await createBackend(runner);
+    const sessionId = await createSession(backend);
+    const submitted = await backend.handle({ v: 1, type: "prompt.submit", requestId: requestId(), sessionId, prompt: "where" });
+    submitted.start?.();
+    await waitFor(() => events.some((event) => event.type === "turn.completed"));
+
+    expect(events.filter((event) => "turnId" in event).map((event) => event.type)).toEqual([
+      "turn.started", "tool.started", "tool.output", "tool.completed", "turn.completed",
+    ]);
+    const loaded = await backend.handle({ v: 1, type: "session.load", requestId: requestId(), sessionId });
+    const transcript = (loaded.messages[0] as Extract<ServerMessage, { type: "response" }> & { result: { transcript: Array<{ kind: string }> } }).result.transcript;
+    expect(transcript.map((record) => record.kind)).toContain("tool.started");
+    expect(transcript.map((record) => record.kind)).toContain("tool.completed");
   });
 
   test("rejects an unknown session", async () => {

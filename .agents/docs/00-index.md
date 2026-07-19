@@ -12,7 +12,7 @@
 ## 当前工程
 
 - 工作区：`C:\Dev\nyan-agent`
-- 当前状态：阶段 4 收尾中；产品外壳、增量侧栏、运行中只读切换、异步标题事件、Lexical/Markdown transcript、真实 provider 底层回合和跨项目最近模型选择已形成可运行垂直切片。
+- 当前状态：阶段 5 进行中；产品外壳与真实 provider 回合已形成可运行垂直切片，shell 工具的 PowerShell UTF-8、长进程轮询、字节截断、进程树取消、领域事件、JSONL 与桌面展示已贯通，下一项是 edit。
 - 包管理器与脚本运行时：Bun。
 - 已安装的关键依赖：AI SDK `7.0.31`、HeroUI `3.2.2`、Tailwind CSS `4.3.3`、Lexical `0.48.0`、Lucide React `1.25.0`。
 

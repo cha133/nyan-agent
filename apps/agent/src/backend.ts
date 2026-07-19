@@ -222,8 +222,18 @@ export class AgentBackend {
             await send({ type: "assistant.block.completed", text: event.text });
           } else if (event.type === "reasoning.delta") {
             await send({ type: "reasoning.delta", text: event.text });
-          } else {
+          } else if (event.type === "reasoning.completed") {
             await this.store.append(sessionId, "assistant.reasoning", { itemId: crypto.randomUUID(), text: event.text }, turnId);
+          } else if (event.type === "tool.started") {
+            const payload = { toolExecutionId: event.toolExecutionId, toolName: event.toolName, input: event.input };
+            await this.store.append(sessionId, "tool.started", payload, turnId);
+            await send({ type: "tool.started", ...payload });
+          } else if (event.type === "tool.output") {
+            await send({ type: "tool.output", toolExecutionId: event.toolExecutionId, preview: event.preview });
+          } else {
+            const payload = { toolExecutionId: event.toolExecutionId, output: event.output };
+            await this.store.append(sessionId, "tool.completed", payload, turnId);
+            await send({ type: "tool.completed", ...payload });
           }
         },
       });

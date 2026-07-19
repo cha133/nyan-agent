@@ -9,6 +9,7 @@ import remarkGfm from "remark-gfm";
 import { PromptEditor } from "./PromptEditor";
 import { INITIAL_VISIBLE_ITEMS, nextVisibleLimit, resetVisibleLimits, visibleItems, visibleLimit } from "./listVisibility";
 import { activeTurnFromSessions } from "./sessionState";
+import { formatToolCompletion, formatToolStart, toolHeading, toTranscriptItems, updateToolItem, type TranscriptItem, type TranscriptRecord } from "./transcript";
 import "./App.css";
 
 type BackendStatus =
@@ -21,8 +22,6 @@ type BackendStatus =
 type Project = { id: string; name: string; path: string; createdAt: string; updatedAt: string };
 type Session = { id: string; projectId?: string; cwd: string; title: string; model: string; status: string; createdAt: string; updatedAt: string; activeTurnId?: string };
 type AvailableModel = { key: string; providerId: string; modelId: string; source: "static" | "discovered"; stale: boolean; unavailable?: boolean };
-type TranscriptRecord = { seq: number; createdAt: string; turnId?: string; kind: string; payload: unknown };
-type TranscriptItem = { id: string; role: "user" | "assistant" | "status"; text: string };
 
 function App() {
   const [status, setStatus] = useState<BackendStatus>({ state: "starting" });
@@ -70,6 +69,15 @@ function App() {
       if (message.type === "assistant.block.completed" && message.sessionId === selectedSessionRef.current) {
         setStreamingText("");
         setTranscript((current) => [...current, { id: `${message.turnId}-${message.seq}`, role: "assistant", text: message.text }]);
+      }
+      if (message.type === "tool.started" && message.sessionId === selectedSessionRef.current) {
+        setTranscript((current) => [...current, { id: message.toolExecutionId, role: "tool", text: formatToolStart(message.toolName, message.input) }]);
+      }
+      if (message.type === "tool.output" && message.sessionId === selectedSessionRef.current) {
+        setTranscript((current) => updateToolItem(current, message.toolExecutionId, (text) => `${toolHeading(text)}\n\n${message.preview}`));
+      }
+      if (message.type === "tool.completed" && message.sessionId === selectedSessionRef.current) {
+        setTranscript((current) => updateToolItem(current, message.toolExecutionId, (text) => formatToolCompletion(toolHeading(text), message.output)));
       }
       if (message.type === "turn.completed" || message.type === "turn.cancelled" || message.type === "turn.failed") {
         const terminalStatus = message.type === "turn.completed" ? "completed" : message.type === "turn.cancelled" ? "cancelled" : "failed";
@@ -305,7 +313,7 @@ function App() {
             <div className="welcome"><div className="welcome-icon"><MessageSquare size={24} /></div><h2>今天想做点什么？</h2><p>选择项目后发送任务，nyan 会在对应目录中工作。</p></div>
           ) : transcript.map((item) => (
             <article className={`message message-${item.role}`} key={item.id}>
-              {item.role === "assistant" ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : <p>{item.text}</p>}
+              {item.role === "assistant" ? <Markdown remarkPlugins={[remarkGfm]}>{item.text}</Markdown> : item.role === "tool" ? <pre>{item.text}</pre> : <p>{item.text}</p>}
             </article>
           ))}
           {streamingText && <article className="message message-assistant streaming"><p>{streamingText}</p></article>}
@@ -403,16 +411,6 @@ function SessionList({ sessions, selectedId, visibleLimit: limit, isReadOnly, on
 function ExpandButton({ total, visibleLimit: limit, onPress }: { total: number; visibleLimit: number; onPress: () => void }) {
   if (total <= INITIAL_VISIBLE_ITEMS) return null;
   return <button className="expand-button" onClick={onPress}>{limit >= total ? "折叠显示" : `展开显示（${total}）`}</button>;
-}
-
-function toTranscriptItems(records: TranscriptRecord[]): TranscriptItem[] {
-  return records.flatMap((record): TranscriptItem[] => {
-    const payload = record.payload as { itemId?: string; text?: string; reason?: string } | undefined;
-    if (record.kind === "user.message" && payload?.text) return [{ id: payload.itemId ?? `record-${record.seq}`, role: "user" as const, text: payload.text }];
-    if (record.kind === "assistant.block" && payload?.text) return [{ id: payload.itemId ?? `record-${record.seq}`, role: "assistant" as const, text: payload.text }];
-    if (record.kind === "turn.interrupted") return [{ id: `record-${record.seq}`, role: "status" as const, text: "上次运行因后端重启而中断。" }];
-    return [];
-  });
 }
 
 function statusLabel(status: string): string {

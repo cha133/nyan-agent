@@ -75,11 +75,11 @@
 - `bun run dev:inspect` 已确认通过 `DevToolsActivePort` 自动连接当前 Tauri WebView2；实测可读取既有 console、实时监听新日志并捕获未处理异常栈。
 - 该阶段最初未使用真实凭据；2026-07-19 已在后续阶段用本机隔离配置完成 Anthropic-compatible 真实流式请求，详见阶段 4 验证记录。
 
-## 下一步：阶段 4 — 产品外壳
+## 下一步：阶段 5 — 三个工具
 
-- 在真实桌面 UI 中验收完整回合、任务切换、停止和标题更新；底层真实 provider 流式调用已通过。
-- 在现有真实桌面 E2E 基础上补充任务切换、停止和标题更新回归覆盖。
-- 收尾窗口细节与阶段 4 验收；Win11 Mica spike 已完成。
+- 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
+- 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
+- 用真实 provider 在桌面端验收 shell 工具调用、长进程轮询与停止；自动化底层覆盖已完成。
 
 ## 进行中：阶段 4 — 产品外壳
 
@@ -140,9 +140,18 @@
 ### 阶段 5 — 三个工具
 
 - [x] 确定 shell 启动折中：默认加载 Profile，设置 `TERM=dumb` + `NYAN_AGENT=1` 跳过交互增强，并保留 `-NonInteractive` 防止提示挂起；不使用 `-NoProfile`。
-- [ ] 实现 shell：PowerShell UTF-8 包装、合并输出、字节截断、长进程、超时和取消。
+- [x] 实现 shell：PowerShell UTF-8 包装、合并输出、字节截断、长进程、超时和取消。
 - [ ] 实现 edit：六级 matcher、唯一性、防过大 span、原子写和 diff。
 - [ ] 实现 subagent：最多三个并行任务、阻塞聚合、单行最新活动和级联取消。
+
+### 阶段 5 当前验证记录
+
+- shell runtime 固定启动 `pwsh.exe -NoLogo -NonInteractive`，短命令使用单层 UTF-16LE `-EncodedCommand`，超过安全命令行阈值时回退到受控 UTF-8 临时 `.ps1`；两条路径都默认加载用户 Profile。
+- 子进程环境设置 `TERM=dumb`、`NYAN_AGENT=1`、no-color 与 pager 变量，只在用户未设置时补 `PYTHONIOENCODING=utf-8`；stdout/stderr 并发读取并按 UTF-8 字节预算保留头尾，stderr 在预算竞争时获得更高保留份额。
+- 单个 `shell` 模型工具同时支持启动、`processId` 轮询、stdin、关闭 stdin 与 kill；默认超时、turn 取消和 turn 收尾都会终止进程树，Windows 使用 `taskkill /T /F`，真实孙进程延迟写文件测试确认没有遗留。
+- AI SDK v7 的 `onToolExecutionStart/End` 回调映射为独立 nyan `toolExecutionId`，provider tool-call ID 不进入领域协议；工具开始/完成写入 JSONL，桌面端可实时展示并从 transcript 恢复同一工具卡片。
+- 新增 shell/agent/backend/desktop 回归，覆盖中文命令与路径、Python 中文 stdin/stdout、中文 stderr、引号、长命令回退、UTF-8 头尾截断、非零退出码、长进程轮询、超时进程树和 AbortSignal 级联取消。
+- 本轮重新通过 `bun run check`、protocol 7 项、agent 32 项、desktop 8 项、Rust 7 项、`bun run build`、`cargo fmt --check`、`git diff --check` 与真实 Tauri `bun run e2e`；E2E 为 1 个 spec、1 个测试，production bundle 仍只有既有大 chunk 提示。
 
 ### 阶段 6 — 稳定与发布
 
