@@ -6,8 +6,9 @@
 | --- | --- |
 | [product.md](product.md) | 产品范围、交互规则与非目标 |
 | [architecture.md](architecture.md) | 已实现的技术架构与关键决策 |
-| [mica.md](mica.md) | Mica 失焦调研、假 Mica 放弃结论、WinUI3 壳迁移备忘 |
 | [AGENTS.md](../AGENTS.md) | agent 日常工程约束（仓库根） |
+
+Mica / 失焦壁纸色调的调研与 PoC 不在本仓维护，见姊妹仓 `C:\Dev\mica-demos`（`docs/handoff.md`、`docs/fake-mica-abandoned.md`）。
 
 若文档与开发者最新明确指令冲突，以最新指令为准，并同步修正文档。
 

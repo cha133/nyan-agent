@@ -148,7 +148,11 @@ pub fn run() {
             let main_window = app
                 .get_webview_window("main")
                 .ok_or("main window was not created")?;
-            platform::apply_window_effects(&main_window)?;
+            #[cfg(windows)]
+            {
+                let mica_host = platform::attach_system_mica(&main_window)?;
+                app.manage(mica_host);
+            }
             let agent_entry = if cfg!(feature = "e2e") {
                 #[cfg(feature = "e2e")]
                 {

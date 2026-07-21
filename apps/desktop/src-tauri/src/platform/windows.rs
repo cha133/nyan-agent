@@ -4,9 +4,12 @@ use std::{
 };
 
 use std::os::windows::process::CommandExt;
-use tauri::{
-    window::{Effect, EffectsBuilder},
-    Runtime, WebviewWindow,
+use tauri::{Runtime, WebviewWindow};
+use windows::UI::Composition::Compositor;
+use windows::Win32::Foundation::HWND;
+use windows::Win32::System::WinRT::{
+    CreateDispatcherQueueController, DispatcherQueueOptions, RoInitialize, DQTAT_COM_NONE,
+    DQTYPE_THREAD_CURRENT, RO_INIT_SINGLETHREADED,
 };
 use windows_sys::Win32::{
     Foundation::{CloseHandle, HANDLE},
@@ -20,6 +23,9 @@ use windows_sys::Win32::{
     },
 };
 
+use super::bootstrap::Bootstrap;
+use super::mica::MicaBackdrop;
+
 const CREATE_NO_WINDOW: u32 = 0x0800_0000;
 
 pub struct BackendProcessGroup(HANDLE);
@@ -32,6 +38,14 @@ impl Drop for BackendProcessGroup {
             unsafe { CloseHandle(self.0) };
         }
     }
+}
+
+/// Keeps WASDK bootstrap + MicaController alive for the process lifetime.
+pub struct SystemMicaHost {
+    _bootstrap: Bootstrap,
+    _dispatcher: windows::System::DispatcherQueueController,
+    _compositor: Compositor,
+    _mica: MicaBackdrop,
 }
 
 pub fn assign_backend_process_group(pid: u32) -> Result<BackendProcessGroup, String> {
@@ -78,8 +92,37 @@ pub fn assign_backend_process_group(pid: u32) -> Result<BackendProcessGroup, Str
     }
 }
 
-pub fn apply_window_effects<R: Runtime>(window: &WebviewWindow<R>) -> tauri::Result<()> {
-    window.set_effects(EffectsBuilder::new().effect(Effect::Mica).build())
+/// Attach WASDK Mica with forced IsInputActive. Do not also call Tauri Effect::Mica.
+pub fn attach_system_mica<R: Runtime>(window: &WebviewWindow<R>) -> Result<SystemMicaHost, String> {
+    let hwnd = window.hwnd().map_err(|err| err.to_string())?;
+    let hwnd = HWND(hwnd.0);
+
+    let _ = unsafe { RoInitialize(RO_INIT_SINGLETHREADED) };
+
+    let bootstrap = Bootstrap::initialize().map_err(|err| format!("WASDK bootstrap failed: {err}"))?;
+    let dispatcher = create_dispatcher_queue()
+        .map_err(|err| format!("DispatcherQueue failed: {err}"))?;
+    let compositor =
+        Compositor::new().map_err(|err| format!("Compositor::new failed: {err}"))?;
+    let mica = MicaBackdrop::attach_locked(&compositor, hwnd)
+        .map_err(|err| format!("MicaController attach failed: {err}"))?;
+
+    Ok(SystemMicaHost {
+        _bootstrap: bootstrap,
+        _dispatcher: dispatcher,
+        _compositor: compositor,
+        _mica: mica,
+    })
+}
+
+fn create_dispatcher_queue() -> windows::core::Result<windows::System::DispatcherQueueController>
+{
+    let options = DispatcherQueueOptions {
+        dwSize: std::mem::size_of::<DispatcherQueueOptions>() as u32,
+        threadType: DQTYPE_THREAD_CURRENT,
+        apartmentType: DQTAT_COM_NONE,
+    };
+    unsafe { CreateDispatcherQueueController(options) }
 }
 
 #[derive(Clone, Debug)]

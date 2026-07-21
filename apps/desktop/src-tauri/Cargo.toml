@@ -20,6 +20,7 @@ e2e = ["dep:tauri-plugin-wdio", "dep:tauri-plugin-wdio-webdriver"]
 
 [build-dependencies]
 tauri-build = { version = "2", features = [] }
+windows-bindgen = "0.61"
 
 [dependencies]
 tauri = { version = "2", features = [] }
@@ -35,3 +36,19 @@ tauri-plugin-wdio-webdriver = { version = "1", optional = true }
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_JobObjects", "Win32_System_Threading"] }
+windows = { version = "0.61", features = [
+    "Foundation",
+    "System",
+    "UI_Composition",
+    "UI_Composition_Desktop",
+    "UI_Core",
+    "Win32_Foundation",
+    "Win32_System_Com",
+    "Win32_System_LibraryLoader",
+    "Win32_System_WinRT",
+    "Win32_System_WinRT_Composition",
+] }
+windows-core = "0.61"
+windows-collections = "0.2"
+windows-future = "0.2"
+windows-numerics = "0.2"
