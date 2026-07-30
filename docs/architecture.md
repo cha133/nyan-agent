@@ -250,23 +250,21 @@ nyan 自己生成的领域 ID 统一使用无前缀的原始 UUIDv4。Bun 端通
 
 ## 9. subagent 工具
 
-主 agent 在 tool execute 内调用另一个 `ToolLoopAgent.generate()`，并传递 `abortSignal`：
+主 agent 在每个 tool execute 内调用一个独立的 `ToolLoopAgent.stream()`，并传递 `abortSignal`：
 
 ```ts
 {
-  tasks: Array<{
-    id: string;
-    prompt: string;
-  }>;
+  id: string;
+  prompt: string;
 }
 ```
 
-- schema 限制 `tasks.length` 为 1–3，执行层并发上限 3。
-- `Promise.allSettled` 等待全部结束；一项失败不丢失其他成功结果。
+- 一次 tool call 只创建一个 subagent。主模型可在同一个 model step 中提交任意多个 subagent tool call，复用 AI SDK 原生的并行工具执行，不设置应用层数量或并发上限。
+- 每个调用独立返回 completed/failed 结果；一项失败不丢失同一步其他调用的成功结果。
 - subagent 用同模型配置和独立上下文，tools 只注入 shell/edit。
 - 每个 subagent 继承 turn cwd 和父 `AbortSignal`，有独立 step limit 和最终输出字节上限。
 - UI 为每个 subagent 只保留一行最新活动；详细过程不展开。tool result 仍完整返回主模型。
-- harness 提醒主模型：任务要相互独立，写清可否修改、范围、交付格式，并避免多个写 subagent 修改同一文件。
+- harness 提醒主模型：并行任务要相互独立，在同一响应中分别调用 subagent，写清可否修改、范围、交付格式，并避免多个写 subagent 修改同一文件。
 
 ## 10. 持久化模型
 

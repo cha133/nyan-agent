@@ -131,20 +131,25 @@ describe("agent runner", () => {
     }
   });
 
-  test("runs independent subagents concurrently and aggregates every result", async () => {
+  test("runs more than three independent subagent tool calls concurrently", async () => {
     let call = 0;
-    const input = JSON.stringify({ tasks: [
+    const tasks = [
       { id: "alpha", prompt: "Inspect alpha without edits." },
       { id: "beta", prompt: "Inspect beta without edits." },
       { id: "gamma", prompt: "Inspect gamma without edits." },
-    ] });
+      { id: "delta", prompt: "Inspect delta without edits." },
+    ];
     let activeWorkers = 0;
     let peakWorkers = 0;
     const model = new MockLanguageModelV4({
       doStream: async () => {
         call++;
-        if (call === 1) return toolCallStream("provider-subagent-1", "subagent", input);
-        if (call <= 4) {
+        if (call === 1) return toolCallsStream(tasks.map((task, index) => ({
+          id: `provider-subagent-${index + 1}`,
+          toolName: "subagent",
+          input: JSON.stringify(task),
+        })));
+        if (call <= 5) {
           const worker = call - 1;
           activeWorkers++;
           peakWorkers = Math.max(peakWorkers, activeWorkers);
@@ -164,28 +169,31 @@ describe("agent runner", () => {
     });
 
     expect(result.status).toBe("completed");
-    expect(peakWorkers).toBe(3);
+    expect(peakWorkers).toBe(4);
     const activities = events.filter((event) => event.type === "subagent.activity");
-    expect(new Set(activities.map((event) => event.subagentId)).size).toBe(3);
-    expect(activities.filter((event) => event.status === "completed").map((event) => event.taskId).sort()).toEqual(["alpha", "beta", "gamma"]);
-    const completion = events.find((event) => event.type === "tool.completed" && JSON.stringify(event).includes('"tasks"'));
-    expect(completion).toMatchObject({ output: { tasks: [
+    expect(new Set(activities.map((event) => event.subagentId)).size).toBe(4);
+    expect(activities.filter((event) => event.status === "completed").map((event) => event.taskId).sort()).toEqual(["alpha", "beta", "delta", "gamma"]);
+    const completions = events
+      .filter((event) => event.type === "tool.completed" && tasks.some((task) => task.id === (event.output as { id?: string } | undefined)?.id))
+      .map((event) => event.output)
+      .sort((left, right) => String((left as { id: string }).id).localeCompare(String((right as { id: string }).id)));
+    expect(completions).toEqual([
       { id: "alpha", status: "completed", text: "result-1" },
       { id: "beta", status: "completed", text: "result-2" },
+      { id: "delta", status: "completed", text: "result-4" },
       { id: "gamma", status: "completed", text: "result-3" },
-    ] } });
+    ]);
   });
 
   test("keeps successful subagent results when a sibling fails", async () => {
     let call = 0;
-    const input = JSON.stringify({ tasks: [
-      { id: "good", prompt: "Return a result." },
-      { id: "bad", prompt: "Fail." },
-    ] });
     const model = new MockLanguageModelV4({
       doStream: async () => {
         call++;
-        if (call === 1) return toolCallStream("provider-subagent-2", "subagent", input);
+        if (call === 1) return toolCallsStream([
+          { id: "provider-subagent-good", toolName: "subagent", input: JSON.stringify({ id: "good", prompt: "Return a result." }) },
+          { id: "provider-subagent-bad", toolName: "subagent", input: JSON.stringify({ id: "bad", prompt: "Fail." }) },
+        ]);
         if (call === 2) return textStream("worker-good", "useful finding");
         if (call === 3) return errorStream("worker exploded");
         return textStream("main-after-failure", "handled");
@@ -200,11 +208,13 @@ describe("agent runner", () => {
     });
 
     expect(result.status).toBe("completed");
-    const completion = events.find((event) => event.type === "tool.completed" && JSON.stringify(event).includes('"tasks"'));
-    expect(completion).toMatchObject({ output: { tasks: [
+    const completions = events
+      .filter((event) => event.type === "tool.completed" && ["good", "bad"].includes(String((event.output as { id?: string } | undefined)?.id)))
+      .map((event) => event.output);
+    expect(completions).toEqual(expect.arrayContaining([
       { id: "good", status: "completed", text: "useful finding" },
       { id: "bad", status: "failed", error: "worker exploded" },
-    ] } });
+    ]));
     expect(events.some((event) => event.type === "subagent.activity" && event.taskId === "bad" && event.status === "failed")).toBe(true);
   });
 
@@ -212,7 +222,7 @@ describe("agent runner", () => {
     let call = 0;
     let markWorkerStarted!: () => void;
     const workerStarted = new Promise<void>((resolve) => { markWorkerStarted = resolve; });
-    const input = JSON.stringify({ tasks: [{ id: "wait", prompt: "Wait until cancelled." }] });
+    const input = JSON.stringify({ id: "wait", prompt: "Wait until cancelled." });
     const model = new MockLanguageModelV4({
       doStream: async ({ abortSignal }) => {
         call++;
@@ -241,11 +251,17 @@ describe("agent runner", () => {
 });
 
 function toolCallStream(id: string, toolName: string, input: string) {
+  return toolCallsStream([{ id, toolName, input }]);
+}
+
+function toolCallsStream(calls: Array<{ id: string; toolName: string; input: string }>) {
   return { stream: simulateReadableStream({ chunks: [
-    { type: "tool-input-start" as const, id, toolName },
-    { type: "tool-input-delta" as const, id, delta: input },
-    { type: "tool-input-end" as const, id },
-    { type: "tool-call" as const, toolCallId: id, toolName, input },
+    ...calls.flatMap(({ id, toolName, input }) => [
+      { type: "tool-input-start" as const, id, toolName },
+      { type: "tool-input-delta" as const, id, delta: input },
+      { type: "tool-input-end" as const, id },
+      { type: "tool-call" as const, toolCallId: id, toolName, input },
+    ]),
     { type: "finish" as const, finishReason: { unified: "tool-calls" as const, raw: undefined }, logprobs: undefined, usage },
   ] }) };
 }

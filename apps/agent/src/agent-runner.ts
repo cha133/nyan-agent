@@ -17,10 +17,9 @@ export type RunResult = { status: "completed" | "cancelled"; responseMessages: M
 
 type SubagentActivityKind = "reasoning" | "tool" | "text";
 type SubagentStatus = "running" | "completed" | "failed" | "cancelled";
-type SubagentInput = { tasks: Array<{ id: string; prompt: string }> };
+type SubagentInput = { id: string; prompt: string };
 type SubagentResult = { id: string; status: "completed"; text: string } | { id: string; status: "failed"; error: string };
 
-const SUBAGENT_CONCURRENCY = 3;
 const SUBAGENT_STEP_LIMIT = 30;
 const SUBAGENT_RESULT_BYTES = 64 * 1024;
 
@@ -40,29 +39,17 @@ export class AgentRunner {
     const tools = {
       ...workerTools,
       subagent: tool({
-        description: "Delegate 1 to 3 independent tasks to parallel subagents. Each subagent has an isolated context and can use shell and edit, but cannot delegate again. The call blocks until every task settles.",
+        description: "Delegate one task to an isolated subagent that can use shell and edit but cannot delegate again. Submit multiple subagent tool calls in the same response when independent tasks should run in parallel.",
         inputSchema: jsonSchema<SubagentInput>({
           type: "object",
           additionalProperties: false,
-          required: ["tasks"],
+          required: ["id", "prompt"],
           properties: {
-            tasks: {
-              type: "array",
-              minItems: 1,
-              maxItems: 3,
-              items: {
-                type: "object",
-                additionalProperties: false,
-                required: ["id", "prompt"],
-                properties: {
-                  id: { type: "string", minLength: 1, maxLength: 80, description: "A unique caller-chosen task label." },
-                  prompt: { type: "string", minLength: 1, description: "A self-contained task with scope, whether edits are allowed, and the expected result." },
-                },
-              },
-            },
+            id: { type: "string", minLength: 1, maxLength: 80, description: "A short caller-chosen task label." },
+            prompt: { type: "string", minLength: 1, description: "A self-contained task with scope, whether edits are allowed, and the expected result." },
           },
         }),
-        execute: async (input, { abortSignal }) => runSubagents({
+        execute: async (input, { abortSignal }) => runSubagent({
           input,
           model: this.model,
           maxOutputTokens: this.maxOutputTokens,
@@ -189,7 +176,7 @@ function createWorkerTools(shell: ShellManager, edit: EditManager, cwd: string) 
   };
 }
 
-async function runSubagents(options: {
+async function runSubagent(options: {
   input: SubagentInput;
   model: LanguageModel;
   maxOutputTokens?: number;
@@ -197,84 +184,58 @@ async function runSubagents(options: {
   tools: ReturnType<typeof createWorkerTools>;
   abortSignal?: AbortSignal;
   onEvent: (event: RunnerEvent) => void | Promise<void>;
-}): Promise<{ tasks: SubagentResult[] }> {
-  const ids = new Set<string>();
-  for (const task of options.input.tasks) {
-    if (!task.id.trim() || !task.prompt.trim()) throw new Error("subagent_invalid_task: Task id and prompt must not be empty");
-    if (ids.has(task.id)) throw new Error("subagent_duplicate_task_id: Subagent task ids must be unique");
-    ids.add(task.id);
-  }
+}): Promise<SubagentResult> {
+  const task = options.input;
+  if (!task.id.trim() || !task.prompt.trim()) throw new Error("subagent_invalid_task: Task id and prompt must not be empty");
 
-  const settled = await mapWithConcurrency(options.input.tasks, SUBAGENT_CONCURRENCY, async (task) => {
-    const subagentId = crypto.randomUUID() as SubagentId;
-    let latest = activityPreview(task.prompt);
-    const activity = async (status: SubagentStatus, kind: SubagentActivityKind, preview = latest) => {
-      latest = activityPreview(preview) || latest;
-      await options.onEvent({ type: "subagent.activity", subagentId, taskId: task.id, status, kind, preview: latest });
-    };
-    await activity("running", "text");
+  const subagentId = crypto.randomUUID() as SubagentId;
+  let latest = activityPreview(task.prompt);
+  const activity = async (status: SubagentStatus, kind: SubagentActivityKind, preview = latest) => {
+    latest = activityPreview(preview) || latest;
+    await options.onEvent({ type: "subagent.activity", subagentId, taskId: task.id, status, kind, preview: latest });
+  };
+  await activity("running", "text");
 
-    const agent = new ToolLoopAgent({
-      model: options.model,
-      instructions: subagentInstructions(options.cwd),
-      tools: options.tools,
-      stopWhen: isStepCount(SUBAGENT_STEP_LIMIT),
-      maxOutputTokens: options.maxOutputTokens,
-    });
-
-    try {
-      const result = await agent.stream({
-        prompt: task.prompt,
-        abortSignal: options.abortSignal,
-        onToolExecutionStart: async ({ toolCall }) => activity("running", "tool", `${toolCall.toolName}: ${previewOutput(toolCall.input)}`),
-      });
-      const text = new Map<string, string>();
-      const reasoning = new Map<string, string>();
-      for await (const part of result.fullStream) {
-        if (part.type === "text-start") text.set(part.id, "");
-        else if (part.type === "text-delta") {
-          const current = `${text.get(part.id) ?? ""}${part.text}`;
-          text.set(part.id, current);
-          await activity("running", "text", current);
-        } else if (part.type === "reasoning-start") reasoning.set(part.id, "");
-        else if (part.type === "reasoning-delta") {
-          const current = `${reasoning.get(part.id) ?? ""}${part.text}`;
-          reasoning.set(part.id, current);
-          await activity("running", "reasoning", current);
-        } else if (part.type === "error") throw part.error;
-      }
-      const finalText = truncateUtf8(await result.text, SUBAGENT_RESULT_BYTES);
-      await activity("completed", "text");
-      return { id: task.id, status: "completed", text: finalText } satisfies SubagentResult;
-    } catch (error) {
-      const cancelled = Boolean(options.abortSignal?.aborted);
-      await activity(cancelled ? "cancelled" : "failed", "text", cancelled ? latest : publicToolError(error));
-      throw error;
-    }
+  const agent = new ToolLoopAgent({
+    model: options.model,
+    instructions: subagentInstructions(options.cwd),
+    tools: options.tools,
+    stopWhen: isStepCount(SUBAGENT_STEP_LIMIT),
+    maxOutputTokens: options.maxOutputTokens,
   });
 
-  if (options.abortSignal?.aborted) throw options.abortSignal.reason ?? new DOMException("Cancelled", "AbortError");
-  return {
-    tasks: settled.map((result, index) => result.status === "fulfilled"
-      ? result.value
-      : { id: options.input.tasks[index].id, status: "failed", error: publicToolError(result.reason) }),
-  };
-}
-
-async function mapWithConcurrency<Input, Output>(items: Input[], limit: number, worker: (item: Input) => Promise<Output>): Promise<PromiseSettledResult<Output>[]> {
-  const results = new Array<PromiseSettledResult<Output>>(items.length);
-  let next = 0;
-  await Promise.all(Array.from({ length: Math.min(limit, items.length) }, async () => {
-    while (next < items.length) {
-      const index = next++;
-      try {
-        results[index] = { status: "fulfilled", value: await worker(items[index]) };
-      } catch (reason) {
-        results[index] = { status: "rejected", reason };
+  try {
+    const result = await agent.stream({
+      prompt: task.prompt,
+      abortSignal: options.abortSignal,
+      onToolExecutionStart: async ({ toolCall }) => activity("running", "tool", `${toolCall.toolName}: ${previewOutput(toolCall.input)}`),
+    });
+    const text = new Map<string, string>();
+    const reasoning = new Map<string, string>();
+    for await (const part of result.fullStream) {
+      if (part.type === "text-start") text.set(part.id, "");
+      else if (part.type === "text-delta") {
+        const current = `${text.get(part.id) ?? ""}${part.text}`;
+        text.set(part.id, current);
+        await activity("running", "text", current);
+      } else if (part.type === "reasoning-start") reasoning.set(part.id, "");
+      else if (part.type === "reasoning-delta") {
+        const current = `${reasoning.get(part.id) ?? ""}${part.text}`;
+        reasoning.set(part.id, current);
+        await activity("running", "reasoning", current);
+      } else if (part.type === "error") {
+        throw part.error;
       }
     }
-  }));
-  return results;
+    const finalText = truncateUtf8(await result.text, SUBAGENT_RESULT_BYTES);
+    await activity("completed", "text");
+    return { id: task.id, status: "completed", text: finalText };
+  } catch (error) {
+    const cancelled = Boolean(options.abortSignal?.aborted);
+    await activity(cancelled ? "cancelled" : "failed", "text", cancelled ? latest : publicToolError(error));
+    if (cancelled) throw options.abortSignal?.reason ?? error;
+    return { id: task.id, status: "failed", error: publicToolError(error) };
+  }
 }
 
 function mainInstructions(cwd: string): string {
@@ -284,7 +245,7 @@ Use the shell tool for reading, searching, builds, tests, and process work. It r
 
 Use the edit tool for precise changes to one UTF-8 text file. Include enough unchanged surrounding context in oldText to make the match unique. Set replaceAll only when every occurrence should change. To create a new file, use empty oldText; never use empty oldText to overwrite an existing file. Read a file again after a rejected match instead of guessing a broader replacement.
 
-Use the subagent tool only for independent tasks that benefit from parallel work or isolated context. Give every task a unique short id and a self-contained prompt that states its scope, expected result, and whether file changes are allowed. Do not assign multiple writing tasks to the same file. A request to explore without modifying files must be written explicitly in the task prompt.
+Use the subagent tool only for a task that benefits from isolated context or can run independently alongside other work. Each call delegates exactly one task. Submit multiple subagent tool calls in the same response to run independent tasks in parallel. Give each call a unique short id and a self-contained prompt that states its scope, expected result, and whether file changes are allowed. Do not assign parallel writing tasks to the same file. A request to explore without modifying files must be written explicitly in the task prompt.
 
 You have full filesystem access, so handle irreversible operations carefully. Use -LiteralPath for filesystem mutations. Before recursive deletion or moving, resolve and verify the exact absolute targets. Never recursively delete a workspace root, user home, or another broad path. Do not build destructive commands by passing paths between different shells.`;
 }

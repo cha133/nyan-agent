@@ -39,8 +39,8 @@
 
 ### subagent
 
-- 这是一个阻塞工具：主 agent 调用后暂停，所有子任务完成后一次性返回结果。
-- 一次调用接受 1–3 个独立子任务，并发上限为 3。
+- 一次 tool call 只委派一个子任务，并在该 subagent 完成后返回独立结果。
+- 需要并行时，主 agent 在同一响应中提交多个 subagent tool call，由 AI SDK 与 shell/edit 一样并行执行；产品不设置 subagent 数量上限。
 - subagent 可使用 shell 和 edit，不可再次调用 subagent，读写不受限。
 - “仅探索不修改”不是 harness 权限模式；主模型必须在子任务提示词里明确写出。harness 的系统提示词负责教主模型如何写清任务边界、预期结果和是否允许修改。
 - 停止主 turn 时，必须级联停止所有 subagent 和它们启动的进程。
